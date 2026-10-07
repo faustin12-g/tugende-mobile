@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Bike, Search } from 'lucide-react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { PageContainer } from '../../components/ui/PageContainer';
 import MapView from '../../components/map/MapView';
@@ -32,7 +33,8 @@ export default function DriverHome() {
       <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-10">
         <div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg">
           <h1 className="text-lg font-bold text-black tracking-tight">
-            🚲 {user?.name || 'Driver'}
+            <Bike aria-hidden="true" className="mr-1 inline h-5 w-5 align-text-bottom" />
+            {user?.name || 'Driver'}
           </h1>
         </div>
 
@@ -72,7 +74,7 @@ export default function DriverHome() {
             
             {/* Empty state */}
             <div className="w-full bg-gray-50 rounded-2xl p-6 flex flex-col items-center gap-3 border border-gray-100">
-              <div className="text-4xl">🔍</div>
+              <Search aria-hidden="true" className="h-10 w-10 text-gray-400" strokeWidth={1.5} />
               <p className="text-gray-400 font-medium text-sm text-center">
                 Ride requests within 2km will appear here
               </p>
@@ -80,7 +82,7 @@ export default function DriverHome() {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
-            <div className="text-5xl grayscale opacity-40">🚲</div>
+            <Bike aria-hidden="true" className="h-12 w-12 text-gray-300" strokeWidth={1.5} />
             <p className="text-gray-400 font-medium text-center">
               Go <span className="text-sunset font-bold">online</span> to start receiving ride requests
             </p>

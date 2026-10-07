@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { Bike, MapPin, Package, Search } from 'lucide-react';
 import { PageContainer } from '../../components/ui/PageContainer';
 import { Button } from '../../components/ui/Button';
 import MapView from '../../components/map/MapView';
@@ -45,25 +46,24 @@ export default function PassengerHome() {
         <div className="bg-gray-50 p-4 rounded-xl flex items-center gap-3 border border-gray-100">
           <div className="w-3 h-3 rounded-full bg-sunset" />
           <span className="text-gray-400 font-medium flex-1">Where to?</span>
-          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          <Search aria-hidden="true" className="w-5 h-5 text-gray-400" />
         </div>
 
         {/* Quick actions */}
         <div className="flex gap-3">
           <Button variant="outline" fullWidth className="py-4">
-            <span className="mr-2">🚲</span> Book a Ride
+            <Bike aria-hidden="true" className="mr-2 h-5 w-5" /> Book a Ride
           </Button>
           <Button variant="outline" fullWidth className="py-4">
-            <span className="mr-2">📦</span> Send Parcel
+            <Package aria-hidden="true" className="mr-2 h-5 w-5" /> Send Parcel
           </Button>
         </div>
 
         {/* Current location indicator */}
         {userLocation && (
           <p className="text-xs text-gray-400 text-center">
-            📍 Location found • Ready to book
+            <MapPin aria-hidden="true" className="mr-1 inline h-3.5 w-3.5" />
+            Location found • Ready to book
           </p>
         )}
       </div>

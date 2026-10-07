@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Bike, UsersRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../store/authStore';
@@ -48,7 +49,7 @@ export default function RoleScreen() {
           onClick={() => setSelectedRole('passenger')}
           className={`flex flex-col items-center p-6 rounded-2xl border-2 transition-all text-left w-full ${selectedRole === 'passenger' ? 'border-sunset bg-sunset/5' : 'border-gray-200 bg-gray-50'}`}
         >
-          <span className="text-5xl mb-4">🧑‍🤝‍🧑</span>
+          <UsersRound aria-hidden="true" className="mb-4 h-12 w-12 text-sunset" strokeWidth={1.5} />
           <h3 className="text-xl font-bold mb-2 text-center">I'm a Passenger</h3>
           <p className="text-gray-500 text-center">Book rides and send parcels across Kigali</p>
         </motion.button>
@@ -58,7 +59,7 @@ export default function RoleScreen() {
           onClick={() => setSelectedRole('driver')}
           className={`flex flex-col items-center p-6 rounded-2xl border-2 transition-all text-left w-full ${selectedRole === 'driver' ? 'border-sunset bg-sunset/5' : 'border-gray-200 bg-gray-50'}`}
         >
-          <span className="text-5xl mb-4">🚴</span>
+          <Bike aria-hidden="true" className="mb-4 h-12 w-12 text-sunset" strokeWidth={1.5} />
           <h3 className="text-xl font-bold mb-2 text-center">I'm a Driver</h3>
           <p className="text-gray-500 text-center">Earn money by giving rides and delivering parcels</p>
         </motion.button>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Bike, CircleDollarSign, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { PageContainer } from '../../components/ui/PageContainer';
@@ -8,19 +9,19 @@ import { Button } from '../../components/ui/Button';
 const slides = [
   {
     id: 1,
-    icon: '🚲',
+    icon: Bike,
     title: 'Book a Ride Instantly',
     description: 'Connect with nearby bicycle riders in Kigali. Affordable, fast, and eco-friendly.'
   },
   {
     id: 2,
-    icon: '📦',
+    icon: Package,
     title: 'Send Parcels Across Kigali',
     description: 'Need to send something? Our riders will pick up and deliver your parcel safely.'
   },
   {
     id: 3,
-    icon: '💰',
+    icon: CircleDollarSign,
     title: 'Earn on Your Bicycle',
     description: 'Turn your bicycle into an income source. Accept rides, deliver parcels, grow your earnings.'
   }
@@ -30,6 +31,7 @@ export default function WelcomeScreen() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const navigate = useNavigate();
   const completeOnboarding = useAuthStore(state => state.completeOnboarding);
+  const CurrentSlideIcon = slides[currentSlide].icon;
 
   const handleNext = () => {
     if (currentSlide < slides.length - 1) {
@@ -57,7 +59,7 @@ export default function WelcomeScreen() {
             className="flex flex-col items-center"
           >
             <div className="w-48 h-48 rounded-full bg-sunset/20 flex items-center justify-center mb-8 relative">
-              <span className="text-7xl">{slides[currentSlide].icon}</span>
+              <CurrentSlideIcon aria-hidden="true" className="h-20 w-20 text-sunset" strokeWidth={1.5} />
             </div>
             <h1 className="text-3xl font-bold mb-4">{slides[currentSlide].title}</h1>
             <p className="text-gray-500 text-lg px-4">{slides[currentSlide].description}</p>
