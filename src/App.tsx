@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import WelcomeScreen from './pages/Welcome/WelcomeScreen';
-import PhoneScreen from './pages/Auth/PhoneScreen';
+import EmailScreen from './pages/Auth/EmailScreen';
 import OTPScreen from './pages/Auth/OTPScreen';
 import RoleScreen from './pages/Auth/RoleScreen';
 import ProfileScreen from './pages/Auth/ProfileScreen';
@@ -24,11 +24,11 @@ function AppRoutes() {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/auth/phone" element={<PhoneScreen />} />
+        <Route path="/auth/email" element={<EmailScreen />} />
         <Route path="/auth/otp" element={<OTPScreen />} />
         <Route path="/auth/role" element={<RoleScreen />} />
         <Route path="/auth/profile" element={<ProfileScreen />} />
-        <Route path="*" element={<Navigate to="/auth/phone" replace />} />
+        <Route path="*" element={<Navigate to="/auth/email" replace />} />
       </Routes>
     );
   }

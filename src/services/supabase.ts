@@ -14,9 +14,9 @@ export function getSupabaseClient(): SupabaseClient {
   return client;
 }
 
-export async function sendOTP(phone: string): Promise<{ success: boolean }> {
+export async function sendOTP(email: string): Promise<{ success: boolean }> {
   const { error } = await getSupabaseClient().auth.signInWithOtp({
-    phone,
+    email,
     options: { shouldCreateUser: true },
   });
 
@@ -25,13 +25,13 @@ export async function sendOTP(phone: string): Promise<{ success: boolean }> {
 }
 
 export async function verifyOTP(
-  phone: string,
+  email: string,
   code: string
 ): Promise<{ success: boolean; error?: string; userId?: string }> {
   const { data, error } = await getSupabaseClient().auth.verifyOtp({
-    phone,
+    email,
     token: code,
-    type: 'sms',
+    type: 'email',
   });
 
   if (error) return { success: false, error: error.message };
@@ -44,7 +44,7 @@ export async function verifyOTP(
 
 export async function saveProfile(profile: {
   id: string;
-  phone: string;
+  email: string;
   name: string;
   role: User['role'];
   bicycleNumber?: string;
@@ -54,20 +54,21 @@ export async function saveProfile(profile: {
     .upsert(
       {
         id: profile.id,
-        phone: profile.phone,
+        email: profile.email,
         full_name: profile.name,
         role: profile.role,
         bicycle_number: profile.bicycleNumber || null,
       },
       { onConflict: 'id' }
     )
-    .select('id, phone, full_name, role, created_at')
+    .select('id, email, phone, full_name, role, created_at')
     .single();
 
   if (error) throw error;
 
   return {
     id: data.id,
+    email: data.email ?? undefined,
     phone: data.phone,
     name: data.full_name,
     role: data.role,

@@ -27,15 +27,17 @@ Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env` using the
 project URL and publishable/anon key from Supabase **Project Settings → API
 Keys**. Never put a service-role key in a `VITE_` variable.
 
-For free local development, open Supabase **Authentication → Providers → Phone**
-and add a test phone number with a fixed OTP under the phone/SMS testing
-settings. Use that exact E.164 number (for Rwanda, `+250...`) and fixed OTP in
-the app; test numbers do not send SMS. Real SMS verification requires a
-configured SMS provider and may incur charges.
+The current app uses email OTP because the Supabase Phone provider requires an
+SMS provider. In **Authentication → Email → Templates**, make sure the sign-in
+email template includes `{{ .Token }}` so the user receives a code accepted by
+the app. Supabase's built-in email delivery has rate and recipient limits; for
+regular team testing, configure a custom SMTP provider.
 
 Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor.
-It creates the RLS-protected `profiles` table used to save passenger and driver
-profiles after phone verification. Restart Vite after changing `.env`.
+For a database where the earlier phone-only schema has already been applied,
+run [`supabase/email-auth-migration.sql`](./supabase/email-auth-migration.sql)
+instead. Both scripts preserve row-level security on `profiles`. Restart Vite
+after changing `.env`.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

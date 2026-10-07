@@ -14,7 +14,7 @@ export default function OTPScreen() {
   const [resending, setResending] = useState(false);
   
   const navigate = useNavigate();
-  const phone = useAuthStore(state => state.phone);
+  const email = useAuthStore(state => state.email);
   const setStoreOtp = useAuthStore(state => state.setOtp);
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export default function OTPScreen() {
       setLoading(true);
       setError('');
       try {
-        const res = await verifyOTP(phone, otp);
+        const res = await verifyOTP(email, otp);
         if (res.success) {
           setStoreOtp(otp);
           navigate('/auth/role');
@@ -48,7 +48,7 @@ export default function OTPScreen() {
     setResending(true);
     setError('');
     try {
-      await sendOTP(phone);
+      await sendOTP(email);
       setCountdown(30);
     } catch (resendError) {
       setError(resendError instanceof Error ? resendError.message : 'Could not resend the verification code.');
@@ -66,8 +66,8 @@ export default function OTPScreen() {
       </div>
       
       <div className="flex-1 flex flex-col items-center">
-        <h1 className="text-3xl font-bold mb-2 self-start">Verify your number</h1>
-        <p className="text-gray-500 mb-8 self-start">Enter the 6-digit code sent to {phone}</p>
+        <h1 className="text-3xl font-bold mb-2 self-start">Verify your email</h1>
+        <p className="text-gray-500 mb-8 self-start">Enter the 6-digit code sent to {email}</p>
 
         <OTPInput value={otp} onChange={setOtp} error={error} />
         <div className="mt-8 text-center">

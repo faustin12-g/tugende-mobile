@@ -1,12 +1,15 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
-  phone text not null unique,
+  email text unique,
+  phone text unique,
   full_name text not null,
   role text not null check (role in ('passenger', 'driver')),
   bicycle_number text,
   created_at timestamptz not null default now(),
   constraint driver_bicycle_number_required
-    check (role <> 'driver' or nullif(trim(bicycle_number), '') is not null)
+    check (role <> 'driver' or nullif(trim(bicycle_number), '') is not null),
+  constraint profile_contact_required
+    check (email is not null or phone is not null)
 );
 
 alter table public.profiles enable row level security;

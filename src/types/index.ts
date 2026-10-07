@@ -1,6 +1,7 @@
 export interface User {
   id: string;
-  phone: string;
+  email?: string;
+  phone?: string | null;
   name: string;
   role: 'passenger' | 'driver';
   avatarUrl?: string;

@@ -13,7 +13,7 @@ export default function ProfileScreen() {
   const [error, setError] = useState('');
   
   const navigate = useNavigate();
-  const { role, phone, completeAuth, setBicycleNumber } = useAuthStore();
+  const { role, email, completeAuth, setBicycleNumber } = useAuthStore();
 
   const handleSubmit = async () => {
     if (!name.trim() || !role || (role === 'driver' && !bikeNumber.trim())) return;
@@ -23,11 +23,11 @@ export default function ProfileScreen() {
     try {
       const { data: { user: authUser }, error: authError } = await getSupabaseClient().auth.getUser();
       if (authError) throw authError;
-      if (!authUser) throw new Error('Your phone session expired. Please verify your number again.');
+      if (!authUser) throw new Error('Your email session expired. Please verify your email again.');
 
       const user = await saveProfile({
         id: authUser.id,
-        phone,
+        email,
         name: name.trim(),
         role,
         bicycleNumber: role === 'driver' ? bikeNumber.trim() : undefined,
