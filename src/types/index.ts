@@ -47,8 +47,25 @@ export interface RideRequest {
     lng: number;
   };
   estimatedFare: number;
-  passengerOffer: number;
+  passengerOffer: number | null;
   status: 'pending' | 'bidding' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  createdAt: string;
+}
+
+export interface NearbyRideRequest extends Omit<RideRequest, 'passengerOffer'> {
+  passengerOffer: number;
+  pickupDistanceMeters: number;
+  driverBid?: number;
+}
+
+export interface RideBid {
+  id: string;
+  rideRequestId: string;
+  driverId: string;
+  driverName: string;
+  bicycleNumber: string | null;
+  proposedFare: number;
+  status: 'pending' | 'accepted' | 'rejected';
   createdAt: string;
 }
 

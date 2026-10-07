@@ -36,8 +36,14 @@ regular team testing, configure a custom SMTP provider.
 Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor.
 For a database where the earlier phone-only schema has already been applied,
 run [`supabase/email-auth-migration.sql`](./supabase/email-auth-migration.sql)
-instead. Both scripts preserve row-level security on `profiles`. Restart Vite
-after changing `.env`.
+instead. Both scripts preserve row-level security on `profiles`.
+
+For an existing project, run
+[`supabase/ride-offer-migration.sql`](./supabase/ride-offer-migration.sql) to
+create or update ride requests and driver bids. It requires the `profiles` table
+to already exist. If ride requests return a 404, this migration has not been
+applied successfully or the Supabase API schema cache needs a moment to reload.
+Refresh the app after the migration completes. Restart Vite after changing `.env`.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

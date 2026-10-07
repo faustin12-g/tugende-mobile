@@ -4,9 +4,7 @@ import {
   Bike,
   Clock,
   Loader2,
-  MapPin,
   Navigation,
-  Package,
   Route,
   X,
 } from 'lucide-react';
@@ -18,9 +16,16 @@ import MapSettings from '../../components/map/MapSettings';
 import { useAuthStore } from '../../store/authStore';
 import { useRideStore } from '../../store/rideStore';
 import { fetchCyclingRoute } from '../../services/directions';
-import { createRideRequest, cancelRideRequest } from '../../services/rideService';
+import {
+  cancelRideRequest,
+  createRideRequest,
+  getRideServiceErrorMessage,
+  getRideBids,
+  respondToRideBid,
+} from '../../services/rideService';
 import { calculateFare, formatFare, formatDistance, formatDuration } from '../../utils/fareCalculator';
 import type { PlaceSelection } from '../../services/googlePlaces';
+import type { RideBid } from '../../types';
 
 export default function PassengerHome() {
   const { user } = useAuthStore();
@@ -45,6 +50,9 @@ export default function PassengerHome() {
   const [waitingSeconds, setWaitingSeconds] = useState(0);
   const [offerAmount, setOfferAmount] = useState('');
   const [isSettingOffer, setIsSettingOffer] = useState(false);
+  const [rideBids, setRideBids] = useState<RideBid[]>([]);
+  const [acceptedBid, setAcceptedBid] = useState<RideBid | null>(null);
+  const [respondingBidId, setRespondingBidId] = useState<string | null>(null);
   const waitingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-set pickup to user's GPS location
@@ -74,7 +82,7 @@ export default function PassengerHome() {
         const fare = calculateFare(routeInfo.distanceKm);
         setRoute(routeInfo, fare);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not fetch route');
+        setError(getRideServiceErrorMessage(err, 'Could not fetch route'));
       }
     },
     [pickup, setDestination, setRoute, setError]
@@ -106,6 +114,8 @@ export default function PassengerHome() {
       });
 
       setActiveRequest(request);
+      setRideBids([]);
+      setAcceptedBid(null);
       setStatus('waiting');
       setWaitingSeconds(0);
 
@@ -114,10 +124,45 @@ export default function PassengerHome() {
         setWaitingSeconds((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create ride request');
+      setError(getRideServiceErrorMessage(err, 'Could not create ride request'));
       setStatus('confirming');
     }
   }, [user, pickup, destination, offerAmount, setStatus, setError, setActiveRequest]);
+
+  const handleRespondToBid = useCallback(async (bid: RideBid, accept: boolean) => {
+    setRespondingBidId(bid.id);
+    setError(null);
+    try {
+      await respondToRideBid(bid.id, accept);
+    } catch (err) {
+      setError(getRideServiceErrorMessage(err, 'Could not respond to this bid.'));
+      setRespondingBidId(null);
+      return;
+    }
+
+    if (accept) {
+      setAcceptedBid(bid);
+      setStatus('accepted');
+      if (waitingInterval.current) {
+        clearInterval(waitingInterval.current);
+        waitingInterval.current = null;
+      }
+    }
+
+    try {
+      const updatedBids = await getRideBids(bid.rideRequestId);
+      setRideBids(updatedBids);
+    } catch (err) {
+      setError(
+        `Your response was saved, but bids could not refresh: ${getRideServiceErrorMessage(
+          err,
+          'Could not reload bids.'
+        )}`
+      );
+    } finally {
+      setRespondingBidId(null);
+    }
+  }, [setError, setStatus]);
 
   const handleBeginRequest = useCallback(() => {
     setOfferAmount('');
@@ -127,24 +172,27 @@ export default function PassengerHome() {
 
   // Cancel ride request
   const handleCancel = useCallback(async () => {
+    if (activeRequest) {
+      try {
+        await cancelRideRequest(activeRequest.id);
+      } catch (err) {
+        setError(getRideServiceErrorMessage(err, 'Could not cancel this ride request.'));
+        return;
+      }
+    }
+
     if (waitingInterval.current) {
       clearInterval(waitingInterval.current);
       waitingInterval.current = null;
     }
 
-    if (activeRequest) {
-      try {
-        await cancelRideRequest(activeRequest.id);
-      } catch {
-        // Best effort cancel
-      }
-    }
-
     reset();
     setOfferAmount('');
     setIsSettingOffer(false);
+    setRideBids([]);
+    setAcceptedBid(null);
     setWaitingSeconds(0);
-  }, [activeRequest, reset]);
+  }, [activeRequest, reset, setError]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -152,6 +200,32 @@ export default function PassengerHome() {
       if (waitingInterval.current) clearInterval(waitingInterval.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (status !== 'waiting' || !activeRequest) return;
+
+    let cancelled = false;
+    const refreshBids = async () => {
+      try {
+        const bids = await getRideBids(activeRequest.id);
+        if (!cancelled) {
+          setRideBids(bids);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(getRideServiceErrorMessage(err, 'Could not load driver bids.'));
+        }
+      }
+    };
+
+    void refreshBids();
+    const interval = setInterval(() => void refreshBids(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeRequest, setError, status]);
 
   const formatWaitTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -211,10 +285,7 @@ export default function PassengerHome() {
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-2" />
             
-            {/* Greeting */}
-            <p className="text-lg font-bold text-black">
-              Hello, {user?.name?.split(' ')[0] || 'there'} 👋
-            </p>
+            <p className="text-xl font-bold tracking-tight text-black">Book a ride</p>
 
             {/* Search */}
             <DestinationSearch
@@ -223,26 +294,10 @@ export default function PassengerHome() {
               onSelect={handleDestinationSelect}
             />
 
-            {/* Quick actions */}
-            <div className="flex gap-3">
-              <Button variant="outline" fullWidth className="py-4">
-                <Bike aria-hidden="true" className="mr-2 h-5 w-5" /> Book a Ride
-              </Button>
-              <Button variant="outline" fullWidth className="py-4">
-                <Package aria-hidden="true" className="mr-2 h-5 w-5" /> Send Parcel
-              </Button>
-            </div>
-
             {error && (
               <p className="text-sm text-red text-center">{error}</p>
             )}
 
-            {userLocation && (
-              <p className="text-xs text-gray-400 text-center">
-                <MapPin aria-hidden="true" className="mr-1 inline h-3.5 w-3.5" />
-                Location found • Ready to book
-              </p>
-            )}
           </motion.div>
         )}
 
@@ -260,8 +315,8 @@ export default function PassengerHome() {
 
             {/* Route summary */}
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-black">
-                {isSettingOffer ? 'Set Your Offer' : 'Confirm Your Ride'}
+              <h2 className="text-xl font-bold tracking-tight text-black">
+                {isSettingOffer ? 'Your offer' : 'Your ride'}
               </h2>
               <button onClick={handleCancel} className="p-2 rounded-full hover:bg-gray-100">
                 <X className="w-5 h-5 text-gray-400" />
@@ -273,7 +328,7 @@ export default function PassengerHome() {
               <div className="flex items-start gap-3">
                 <div className="mt-1 w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow" />
                 <div>
-                  <p className="text-xs text-gray-400 font-medium">PICKUP</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pickup</p>
                   <p className="text-sm font-semibold text-black truncate">{pickup?.address}</p>
                 </div>
               </div>
@@ -281,7 +336,7 @@ export default function PassengerHome() {
               <div className="flex items-start gap-3">
                 <div className="mt-1 w-3 h-3 rounded-full bg-sunset border-2 border-white shadow" />
                 <div>
-                  <p className="text-xs text-gray-400 font-medium">DESTINATION</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Drop-off</p>
                   <p className="text-sm font-semibold text-black truncate">{destination.name}</p>
                 </div>
               </div>
@@ -291,26 +346,26 @@ export default function PassengerHome() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-gray-50 rounded-xl p-3 text-center">
                 <Route className="w-4 h-4 text-sunset mx-auto mb-1" />
-                <p className="text-sm font-bold text-black">{formatDistance(route.distanceKm)}</p>
-                <p className="text-xs text-gray-400">Distance</p>
+                <p className="text-base font-bold text-black">{formatDistance(route.distanceKm)}</p>
+                <p className="text-xs font-medium text-gray-500">Distance</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-3 text-center">
                 <Clock className="w-4 h-4 text-sunset mx-auto mb-1" />
-                <p className="text-sm font-bold text-black">{formatDuration(route.durationMin)}</p>
-                <p className="text-xs text-gray-400">Est. Time</p>
+                <p className="text-base font-bold text-black">{formatDuration(route.durationMin)}</p>
+                <p className="text-xs font-medium text-gray-500">Time</p>
               </div>
             </div>
 
-            <div className="rounded-xl bg-sunset/5 px-4 py-3 mb-4">
-              <p className="text-sm font-semibold text-black">Estimated fare: {formatFare(estimatedFare)}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                This is a guide only. Your request will use the offer you choose.
-              </p>
+            <div className="mb-4 flex items-center justify-between rounded-xl bg-sunset/5 px-4 py-3">
+              <span className="text-sm font-semibold text-gray-700">Est. fare</span>
+              <span className="text-lg font-extrabold tracking-tight text-sunset">
+                {formatFare(estimatedFare)}
+              </span>
             </div>
 
             {isSettingOffer && (
               <label className="block mb-4">
-                <span className="mb-2 block text-sm font-semibold text-black">Your offer (RWF)</span>
+                <span className="mb-2 block text-sm font-bold text-black">Your offer · RWF</span>
                 <input
                   type="number"
                   min="1"
@@ -318,13 +373,10 @@ export default function PassengerHome() {
                   inputMode="numeric"
                   value={offerAmount}
                   onChange={(event) => setOfferAmount(event.target.value)}
-                  placeholder="Enter the amount you want to pay"
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base text-black outline-none focus:border-sunset focus:ring-2 focus:ring-sunset/20"
+                  placeholder="Amount"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-lg font-semibold text-black outline-none transition focus:border-sunset focus:ring-2 focus:ring-sunset/20"
                   aria-label="Your offer in RWF"
                 />
-                <span className="mt-2 block text-xs text-gray-500">
-                  Nearby drivers will see your offer and can respond with a bid.
-                </span>
               </label>
             )}
 
@@ -379,15 +431,14 @@ export default function PassengerHome() {
             className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-8 pb-12 z-10 flex flex-col items-center"
           >
             <Loader2 className="w-10 h-10 text-sunset animate-spin mb-4" />
-            <p className="text-lg font-bold text-black">Submitting your request...</p>
-            <p className="text-sm text-gray-400 mt-1">Finding nearby riders</p>
+            <p className="text-lg font-bold tracking-tight text-black">Finding a driver…</p>
           </motion.div>
         )}
 
         {/* ═══ WAITING STATE ═══ */}
-        {status === 'waiting' && (
+        {(status === 'waiting' || status === 'accepted') && (
           <motion.div
-            key="waiting"
+            key={status}
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
@@ -396,7 +447,7 @@ export default function PassengerHome() {
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-6" />
 
-            <div className="flex flex-col items-center text-center">
+            <div className="flex max-h-[65vh] flex-col items-center overflow-y-auto text-center">
               {/* Pulsing bike animation */}
               <div className="relative mb-4">
                 <motion.div
@@ -406,12 +457,13 @@ export default function PassengerHome() {
                   style={{ width: 80, height: 80, top: -10, left: -10 }}
                 />
                 <div className="w-16 h-16 bg-sunset/10 rounded-full flex items-center justify-center relative z-10">
-                  <span className="text-3xl">🚲</span>
+                  <Bike aria-hidden="true" className="h-8 w-8 text-sunset" />
                 </div>
               </div>
 
-              <h2 className="text-xl font-bold text-black mb-1">Looking for riders...</h2>
-              <p className="text-sm text-gray-400 mb-1">Nearby bicycle riders can see your request</p>
+              <h2 className="text-xl font-bold tracking-tight text-black mb-1">
+                {status === 'accepted' ? 'Ride confirmed' : 'Finding a driver…'}
+              </h2>
               
               {/* Timer */}
               <div className="flex items-center gap-2 bg-gray-50 rounded-full px-4 py-2 mt-3 mb-6">
@@ -425,24 +477,89 @@ export default function PassengerHome() {
               <div className="w-full bg-gray-50 rounded-2xl p-4 mb-6 text-left">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-xs text-gray-500 truncate">{pickup?.address}</span>
+                  <span className="text-sm font-medium text-gray-700 truncate">{pickup?.address}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-sunset" />
-                  <span className="text-xs text-gray-500 truncate">{destination?.name}</span>
+                  <span className="text-sm font-medium text-gray-700 truncate">{destination?.name}</span>
                 </div>
                 <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between">
-                  <span className="text-xs text-gray-400">Your offer</span>
-                  <span className="text-sm font-bold text-sunset">
-                    {activeRequest ? formatFare(activeRequest.passengerOffer) : '—'}
+                  <span className="text-sm font-semibold text-gray-700">Your offer</span>
+                  <span className="text-base font-extrabold text-sunset">
+                    {activeRequest?.passengerOffer != null
+                      ? formatFare(activeRequest.passengerOffer)
+                      : '—'}
                   </span>
                 </div>
               </div>
 
-              {/* Cancel button */}
-              <Button variant="ghost" fullWidth onClick={handleCancel}>
-                <X className="mr-2 h-4 w-4" /> Cancel Request
-              </Button>
+              {status === 'accepted' && acceptedBid && (
+                <div className="w-full rounded-2xl border border-green-100 bg-green-50 p-4 mb-4 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Driver</p>
+                  <p className="mt-1 text-lg font-bold tracking-tight text-black">{acceptedBid.driverName}</p>
+                  {acceptedBid.bicycleNumber && (
+                    <p className="text-sm text-gray-600">Bicycle {acceptedBid.bicycleNumber}</p>
+                  )}
+                  <p className="mt-2 text-sm font-semibold text-green-700">
+                    Agreed fare: {formatFare(acceptedBid.proposedFare)}
+                  </p>
+                </div>
+              )}
+
+              {status === 'waiting' && (
+                <div className="w-full mb-5 text-left">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="font-bold text-black">Driver bids</h3>
+                    <span className="text-xs font-medium text-gray-500">{rideBids.length}</span>
+                  </div>
+                  {rideBids.length === 0 ? (
+                    <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
+                      No bids yet
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {rideBids.filter((bid) => bid.status === 'pending').map((bid) => (
+                        <div key={bid.id} className="rounded-xl border border-gray-100 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-black">{bid.driverName}</p>
+                              {bid.bicycleNumber && (
+                                <p className="text-xs text-gray-500">Bicycle {bid.bicycleNumber}</p>
+                              )}
+                            </div>
+                            <p className="font-bold text-sunset">{formatFare(bid.proposedFare)}</p>
+                          </div>
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              variant="ghost"
+                              disabled={respondingBidId !== null}
+                              onClick={() => void handleRespondToBid(bid, false)}
+                              className="flex-1"
+                            >
+                              Decline
+                            </Button>
+                            <Button
+                              disabled={respondingBidId !== null}
+                              onClick={() => void handleRespondToBid(bid, true)}
+                              className="flex-1"
+                            >
+                              Accept bid
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {error && <p className="mb-3 w-full text-sm text-red">{error}</p>}
+
+              {status === 'waiting' && (
+                <Button variant="ghost" fullWidth onClick={handleCancel}>
+                  <X className="mr-2 h-4 w-4" /> Cancel Request
+                </Button>
+              )}
             </div>
           </motion.div>
         )}
