@@ -47,6 +47,7 @@ export interface RideRequest {
     lng: number;
   };
   estimatedFare: number;
+  passengerOffer: number;
   status: 'pending' | 'bidding' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
   createdAt: string;
 }

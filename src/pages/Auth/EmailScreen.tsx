@@ -54,7 +54,7 @@ export default function EmailScreen() {
         {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
       </div>
 
-      <div className="mt-auto pb-4">
+      <div className="mt-auto pb-4 space-y-3">
         <Button
           fullWidth
           size="lg"

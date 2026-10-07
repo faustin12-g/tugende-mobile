@@ -3,6 +3,7 @@ import { Bike, Search } from 'lucide-react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { PageContainer } from '../../components/ui/PageContainer';
 import MapView from '../../components/map/MapView';
+import MapSettings from '../../components/map/MapSettings';
 import { useAuthStore } from '../../store/authStore';
 
 export default function DriverHome() {
@@ -39,17 +40,20 @@ export default function DriverHome() {
         </div>
 
         {/* Online/Offline Toggle */}
-        <button 
-          onClick={handleToggleOnline}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-lg transition-all duration-300 ${
-            isOnline 
-              ? 'bg-sunset text-white' 
-              : 'bg-white text-gray-500'
-          }`}
-        >
-          <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-white animate-pulse' : 'bg-gray-300'}`} />
-          <span className="text-sm font-semibold">{isOnline ? 'Online' : 'Offline'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleToggleOnline}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-lg transition-all duration-300 ${
+              isOnline 
+                ? 'bg-sunset text-white' 
+                : 'bg-white text-gray-500'
+            }`}
+          >
+            <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-white animate-pulse' : 'bg-gray-300'}`} />
+            <span className="text-sm font-semibold">{isOnline ? 'Online' : 'Offline'}</span>
+          </button>
+          <MapSettings />
+        </div>
       </div>
 
       {/* Full-screen Map */}

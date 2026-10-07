@@ -14,6 +14,11 @@ export function getSupabaseClient(): SupabaseClient {
   return client;
 }
 
+export async function signOut(): Promise<void> {
+  const { error } = await getSupabaseClient().auth.signOut();
+  if (error) throw error;
+}
+
 export async function sendOTP(email: string): Promise<{ success: boolean }> {
   const { error } = await getSupabaseClient().auth.signInWithOtp({
     email,
@@ -28,18 +33,23 @@ export async function verifyOTP(
   email: string,
   code: string
 ): Promise<{ success: boolean; error?: string; userId?: string }> {
-  const { data, error } = await getSupabaseClient().auth.verifyOtp({
-    email,
-    token: code,
-    type: 'email',
-  });
+  const auth = getSupabaseClient().auth;
+  let lastError: Error | null = null;
 
-  if (error) return { success: false, error: error.message };
-  if (!data.user) {
-    return { success: false, error: 'Supabase did not return an authenticated user.' };
+  for (const type of ['signup', 'email'] as const) {
+    const { data, error } = await auth.verifyOtp({ email, token: code, type });
+    if (error) {
+      lastError = error;
+      continue;
+    }
+    if (!data.user) {
+      return { success: false, error: 'Supabase did not return an authenticated user.' };
+    }
+
+    return { success: true, userId: data.user.id };
   }
 
-  return { success: true, userId: data.user.id };
+  return { success: false, error: lastError?.message ?? 'Could not verify the code.' };
 }
 
 export async function saveProfile(profile: {
