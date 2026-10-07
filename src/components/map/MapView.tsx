@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import type { PlaceSelection } from '../../services/googlePlaces';
 
 // Kigali center coordinates
 const KIGALI_CENTER: [number, number] = [29.8739, -1.9403];
@@ -25,6 +26,8 @@ export interface MapViewProps {
   onMapReady?: (map: mapboxgl.Map) => void;
   /** Callback when user location is found */
   onLocationFound?: (coords: { lat: number; lng: number }) => void;
+  /** Selected destination to show on the map */
+  destination?: PlaceSelection | null;
   /** Additional CSS classes for the container */
   className?: string;
 }
@@ -36,10 +39,12 @@ export default function MapView({
   interactive = true,
   onMapReady,
   onLocationFound,
+  destination = null,
   className = '',
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -116,6 +121,27 @@ export default function MapView({
       mapRef.current = null;
     };
   }, [initMap]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!destination) {
+      destinationMarkerRef.current?.remove();
+      destinationMarkerRef.current = null;
+      return;
+    }
+
+    const { lat, lng } = destination.location;
+    if (!destinationMarkerRef.current) {
+      destinationMarkerRef.current = new mapboxgl.Marker({ color: '#f97316' });
+    }
+    destinationMarkerRef.current
+      .setLngLat([lng, lat])
+      .setPopup(new mapboxgl.Popup({ offset: 24 }).setText(destination.name))
+      .addTo(map);
+    map.flyTo({ center: [lng, lat], zoom: 15 });
+  }, [destination]);
 
   const displayedError = mapError ?? configurationError;
 

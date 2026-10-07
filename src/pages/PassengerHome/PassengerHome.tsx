@@ -1,13 +1,16 @@
 import { useCallback, useState } from 'react';
-import { Bike, MapPin, Package, Search } from 'lucide-react';
+import { Bike, MapPin, Package } from 'lucide-react';
 import { PageContainer } from '../../components/ui/PageContainer';
 import { Button } from '../../components/ui/Button';
+import DestinationSearch from '../../components/map/DestinationSearch';
 import MapView from '../../components/map/MapView';
 import { useAuthStore } from '../../store/authStore';
+import type { PlaceSelection } from '../../services/googlePlaces';
 
 export default function PassengerHome() {
   const { user } = useAuthStore();
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [destination, setDestination] = useState<PlaceSelection | null>(null);
   const handleLocationFound = useCallback((coords: { lat: number; lng: number }) => {
     setUserLocation(coords);
   }, []);
@@ -35,6 +38,7 @@ export default function PassengerHome() {
         <MapView
           showUserLocation
           onLocationFound={handleLocationFound}
+          destination={destination}
         />
       </div>
 
@@ -43,11 +47,11 @@ export default function PassengerHome() {
         <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-2" />
         
         {/* Search bar */}
-        <div className="bg-gray-50 p-4 rounded-xl flex items-center gap-3 border border-gray-100">
-          <div className="w-3 h-3 rounded-full bg-sunset" />
-          <span className="text-gray-400 font-medium flex-1">Where to?</span>
-          <Search aria-hidden="true" className="w-5 h-5 text-gray-400" />
-        </div>
+        <DestinationSearch
+          userLocation={userLocation}
+          selectedPlace={destination}
+          onSelect={setDestination}
+        />
 
         {/* Quick actions */}
         <div className="flex gap-3">

@@ -10,6 +10,33 @@ app's origin in the token's URL restrictions (for example,
 Without a valid token, the map displays a configuration message instead of
 remaining on the loading indicator.
 
+## Google Places setup
+
+Enable **Maps JavaScript API** and **Places API (New)** in the Google Cloud
+project, then set `VITE_GOOGLE_PLACES_KEY` in `.env` to its API key. This key
+is delivered to the browser and is public in the built app; restrict it to the
+required APIs and, before release, use separate keys with website, Android, and
+iOS application restrictions. Destination autocomplete is biased to Kigali
+and Rwanda. Selecting a suggestion fetches its address and coordinates, moves
+the Mapbox map to it, and adds a destination marker. Restart Vite after changing
+`.env`.
+
+## Supabase setup
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env` using the
+project URL and publishable/anon key from Supabase **Project Settings → API
+Keys**. Never put a service-role key in a `VITE_` variable.
+
+For free local development, open Supabase **Authentication → Providers → Phone**
+and add a test phone number with a fixed OTP under the phone/SMS testing
+settings. Use that exact E.164 number (for Rwanda, `+250...`) and fixed OTP in
+the app; test numbers do not send SMS. Real SMS verification requires a
+configured SMS provider and may incur charges.
+
+Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor.
+It creates the RLS-protected `profiles` table used to save passenger and driver
+profiles after phone verification. Restart Vite after changing `.env`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

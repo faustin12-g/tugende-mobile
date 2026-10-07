@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { getSupabaseClient, saveProfile } from '../../services/supabase';
 import { PageContainer } from '../../components/ui/PageContainer';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -8,26 +9,37 @@ import { Input } from '../../components/ui/Input';
 export default function ProfileScreen() {
   const [name, setName] = useState('');
   const [bikeNumber, setBikeNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
   const navigate = useNavigate();
   const { role, phone, completeAuth, setBicycleNumber } = useAuthStore();
 
-  const handleSubmit = () => {
-    if (name && (role !== 'driver' || bikeNumber)) {
-      if (role === 'driver') {
-        setBicycleNumber(bikeNumber);
-      }
-      
-      const user = {
-        id: crypto.randomUUID(),
+  const handleSubmit = async () => {
+    if (!name.trim() || !role || (role === 'driver' && !bikeNumber.trim())) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      const { data: { user: authUser }, error: authError } = await getSupabaseClient().auth.getUser();
+      if (authError) throw authError;
+      if (!authUser) throw new Error('Your phone session expired. Please verify your number again.');
+
+      const user = await saveProfile({
+        id: authUser.id,
         phone,
-        name,
-        role: role as 'passenger' | 'driver',
-        createdAt: new Date().toISOString(),
-      };
-      
+        name: name.trim(),
+        role,
+        bicycleNumber: role === 'driver' ? bikeNumber.trim() : undefined,
+      });
+
+      if (role === 'driver') setBicycleNumber(bikeNumber.trim());
       completeAuth(user);
       navigate('/home');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save your profile.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -60,6 +72,7 @@ export default function ProfileScreen() {
             onChange={(e) => setBikeNumber(e.target.value)}
           />
         )}
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </div>
 
       <div className="mt-auto pb-4">
@@ -68,6 +81,7 @@ export default function ProfileScreen() {
           size="lg"
           onClick={handleSubmit}
           disabled={!isFormValid}
+          loading={loading}
         >
           Complete Setup
         </Button>

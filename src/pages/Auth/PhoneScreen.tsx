@@ -9,18 +9,21 @@ import { Input } from '../../components/ui/Input';
 export default function PhoneScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
   const setPhone = useAuthStore(state => state.setPhone);
 
   const handleSubmit = async () => {
     if (phoneNumber.length >= 9) {
       setLoading(true);
+      setError('');
+      const phone = `+250${phoneNumber}`;
       try {
-        await sendOTP(phoneNumber);
-        setPhone(phoneNumber);
+        await sendOTP(phone);
+        setPhone(phone);
         navigate('/auth/otp');
-      } catch (error) {
-        console.error(error);
+      } catch (requestError) {
+        setError(requestError instanceof Error ? requestError.message : 'Could not send the verification code.');
       } finally {
         setLoading(false);
       }
@@ -48,6 +51,7 @@ export default function PhoneScreen() {
           onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
           autoFocus
         />
+        {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
       </div>
 
       <div className="mt-auto pb-4">
