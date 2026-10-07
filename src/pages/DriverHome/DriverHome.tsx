@@ -225,7 +225,7 @@ export default function DriverHome() {
                       </div>
                       <div className="space-y-2 text-sm">
                         <p className="flex items-start gap-2 text-gray-700">
-                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-gray-500" />
                           <span className="truncate">{request.pickup.address}</span>
                         </p>
                         <p className="flex items-start gap-2 text-gray-700">
@@ -233,7 +233,7 @@ export default function DriverHome() {
                           <span className="truncate">{request.destination.address}</span>
                         </p>
                         {request.driverBid !== undefined ? (
-                          <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                          <p className="mt-3 rounded-lg bg-sunset/5 px-3 py-2 text-sm font-semibold text-sunset">
                             Your bid: {formatFare(request.driverBid)}
                           </p>
                         ) : isSelected ? (

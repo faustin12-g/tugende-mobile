@@ -5,6 +5,7 @@ import {
   Clock,
   Loader2,
   Navigation,
+  Package,
   Route,
   X,
 } from 'lucide-react';
@@ -294,6 +295,11 @@ export default function PassengerHome() {
               onSelect={handleDestinationSelect}
             />
 
+            <Button variant="outline" fullWidth className="py-4">
+              <Package aria-hidden="true" className="mr-2 h-5 w-5" />
+              Send Parcel
+            </Button>
+
             {error && (
               <p className="text-sm text-red text-center">{error}</p>
             )}
@@ -326,7 +332,7 @@ export default function PassengerHome() {
             {/* Pickup & Destination */}
             <div className="space-y-3 mb-4">
               <div className="flex items-start gap-3">
-                <div className="mt-1 w-3 h-3 rounded-full bg-green-500 border-2 border-white shadow" />
+                <div className="mt-1 w-3 h-3 rounded-full bg-gray-500 border-2 border-white shadow" />
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pickup</p>
                   <p className="text-sm font-semibold text-black truncate">{pickup?.address}</p>
@@ -476,7 +482,7 @@ export default function PassengerHome() {
               {/* Ride details summary */}
               <div className="w-full bg-gray-50 rounded-2xl p-4 mb-6 text-left">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <div className="w-2 h-2 rounded-full bg-gray-500" />
                   <span className="text-sm font-medium text-gray-700 truncate">{pickup?.address}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -494,13 +500,13 @@ export default function PassengerHome() {
               </div>
 
               {status === 'accepted' && acceptedBid && (
-                <div className="w-full rounded-2xl border border-green-100 bg-green-50 p-4 mb-4 text-left">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Driver</p>
+                <div className="w-full rounded-2xl border border-sunset/20 bg-sunset/5 p-4 mb-4 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-sunset">Driver</p>
                   <p className="mt-1 text-lg font-bold tracking-tight text-black">{acceptedBid.driverName}</p>
                   {acceptedBid.bicycleNumber && (
                     <p className="text-sm text-gray-600">Bicycle {acceptedBid.bicycleNumber}</p>
                   )}
-                  <p className="mt-2 text-sm font-semibold text-green-700">
+                  <p className="mt-2 text-sm font-semibold text-sunset">
                     Agreed fare: {formatFare(acceptedBid.proposedFare)}
                   </p>
                 </div>
