@@ -1,5 +1,15 @@
 # React + TypeScript + Vite
 
+## Map setup
+
+The map requires a valid public Mapbox access token. Copy `.env.example` to `.env`,
+set `VITE_MAPBOX_TOKEN` to a token with `styles:read` permission, and allow the
+app's origin in the token's URL restrictions (for example,
+`http://localhost:5174/*`). Restart the Vite dev server after changing `.env`.
+
+Without a valid token, the map displays a configuration message instead of
+remaining on the loading indicator.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

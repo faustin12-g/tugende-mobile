@@ -17,6 +17,7 @@
     "autoprefixer": "^10.6.1",
     "framer-motion": "^14.0.0",
     "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.32.0",
     "postcss": "^8.5.29",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
