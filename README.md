@@ -1,5 +1,50 @@
 # React + TypeScript + Vite
 
+## Map setup
+
+The map requires a valid public Mapbox access token. Copy `.env.example` to `.env`,
+set `VITE_MAPBOX_TOKEN` to a token with `styles:read` permission, and allow the
+app's origin in the token's URL restrictions (for example,
+`http://localhost:5174/*`). Restart the Vite dev server after changing `.env`.
+
+Without a valid token, the map displays a configuration message instead of
+remaining on the loading indicator.
+
+## Google Places setup
+
+Enable **Maps JavaScript API** and **Places API (New)** in the Google Cloud
+project, then set `VITE_GOOGLE_PLACES_KEY` in `.env` to its API key. This key
+is delivered to the browser and is public in the built app; restrict it to the
+required APIs and, before release, use separate keys with website, Android, and
+iOS application restrictions. Destination autocomplete is biased to Kigali
+and Rwanda. Selecting a suggestion fetches its address and coordinates, moves
+the Mapbox map to it, and adds a destination marker. Restart Vite after changing
+`.env`.
+
+## Supabase setup
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env` using the
+project URL and publishable/anon key from Supabase **Project Settings → API
+Keys**. Never put a service-role key in a `VITE_` variable.
+
+The current app uses email OTP because the Supabase Phone provider requires an
+SMS provider. In **Authentication → Email → Templates**, make sure the sign-in
+email template includes `{{ .Token }}` so the user receives a code accepted by
+the app. Supabase's built-in email delivery has rate and recipient limits; for
+regular team testing, configure a custom SMTP provider.
+
+Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor.
+For a database where the earlier phone-only schema has already been applied,
+run [`supabase/email-auth-migration.sql`](./supabase/email-auth-migration.sql)
+instead. Both scripts preserve row-level security on `profiles`.
+
+For an existing project, run
+[`supabase/ride-offer-migration.sql`](./supabase/ride-offer-migration.sql) to
+create or update ride requests and driver bids. It requires the `profiles` table
+to already exist. If ride requests return a 404, this migration has not been
+applied successfully or the Supabase API schema cache needs a moment to reload.
+Refresh the app after the migration completes. Restart Vite after changing `.env`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
