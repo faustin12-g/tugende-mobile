@@ -69,6 +69,65 @@ export interface RideBid {
   createdAt: string;
 }
 
+export interface ParcelDelivery {
+  id: string;
+  senderId: string;
+  pickup: {
+    address: string;
+    lat: number;
+    lng: number;
+  };
+  destination: {
+    address: string;
+    lat: number;
+    lng: number;
+  };
+  senderName: string;
+  senderPhone: string;
+  recipientName: string;
+  recipientPhone: string;
+  distanceKm: number;
+  durationMin: number;
+  estimatedFare: number;
+  senderOffer: number;
+  status: RideRequest['status'];
+  createdAt: string;
+}
+
+export interface NearbyParcelDelivery
+  extends Omit<ParcelDelivery, 'senderName' | 'senderPhone' | 'recipientName' | 'recipientPhone'> {
+  pickupDistanceMeters: number;
+  driverBid?: number;
+}
+
+export interface ParcelBid {
+  id: string;
+  parcelDeliveryId: string;
+  driverId: string;
+  driverName: string;
+  bicycleNumber: string | null;
+  proposedFare: number;
+  status: RideBid['status'];
+  createdAt: string;
+}
+
+export type TrackableType = 'ride' | 'parcel';
+
+export interface TripTracking {
+  type: TrackableType;
+  id: string;
+  status: RideRequest['status'];
+  pickup: { address: string; lat: number; lng: number };
+  destination: { address: string; lat: number; lng: number };
+  driverLocation: { lat: number; lng: number; heading: number | null } | null;
+  updatedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface DriverActiveTrip extends TripTracking {
+  agreedFare: number;
+}
+
 export interface Bid {
   id: string;
   rideRequestId: string;

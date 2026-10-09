@@ -33,6 +33,12 @@ export interface MapViewProps {
   routeGeometry?: GeoJSON.LineString | null;
   /** Location of the bicycle/driver on the map */
   bikeLocation?: { lat: number; lng: number } | null;
+  /** Whether to display a pin at the pickup location */
+  showPickupMarker?: boolean;
+  /** Heading in degrees clockwise from north for the driver marker */
+  bikeHeading?: number | null;
+  /** Keep the map camera centered on the live driver marker */
+  followBikeLocation?: boolean;
   /** Whether to show expanding radar waves at pickup (searching for drivers) */
   searching?: boolean;
   className?: string;
@@ -49,6 +55,9 @@ export default function MapView({
   pickupLocation = null,
   routeGeometry = null,
   bikeLocation = null,
+  showPickupMarker = true,
+  bikeHeading = null,
+  followBikeLocation = false,
   searching = false,
   className = '',
 }: MapViewProps) {
@@ -152,7 +161,7 @@ export default function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    if (!pickupLocation) {
+    if (!pickupLocation || !showPickupMarker) {
       pickupMarkerRef.current?.remove();
       pickupMarkerRef.current = null;
       return;
@@ -160,13 +169,13 @@ export default function MapView({
 
     if (!pickupMarkerRef.current) {
       const el = document.createElement('div');
-      el.innerHTML = `<div style="position:relative;"><div style="width:16px;height:16px;background:#10b981;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div><div class="pickup-pulse" style="position:absolute;top:-4px;left:-4px;width:24px;height:24px;background:rgba(16,185,129,0.3);border-radius:50%;"></div></div>`;
+      el.innerHTML = `<div style="position:relative;"><div style="width:16px;height:16px;background:#F97316;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div><div class="pickup-pulse" style="position:absolute;top:-4px;left:-4px;width:24px;height:24px;background:rgba(249,115,22,0.3);border-radius:50%;"></div></div>`;
       pickupMarkerRef.current = new mapboxgl.Marker({ element: el });
     }
     pickupMarkerRef.current
       .setLngLat([pickupLocation.lng, pickupLocation.lat])
       .addTo(map);
-  }, [pickupLocation]);
+  }, [pickupLocation, showPickupMarker]);
 
   // ── Bike marker (driver en route) ──
   useEffect(() => {
@@ -186,8 +195,15 @@ export default function MapView({
     }
     bikeMarkerRef.current
       .setLngLat([bikeLocation.lng, bikeLocation.lat])
+      .setRotation(bikeHeading ?? 0)
       .addTo(map);
-  }, [bikeLocation]);
+  }, [bikeLocation, bikeHeading]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !bikeLocation || !followBikeLocation) return;
+    map.easeTo({ center: [bikeLocation.lng, bikeLocation.lat], duration: 700 });
+  }, [bikeLocation, followBikeLocation]);
 
   // ── Geographic radar waves (searching for drivers) ──
   useEffect(() => {

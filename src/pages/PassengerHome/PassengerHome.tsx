@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   Bike,
   Clock,
@@ -7,6 +8,7 @@ import {
   Navigation,
   Package,
   Route,
+  Share2,
   X,
 } from 'lucide-react';
 import { PageContainer } from '../../components/ui/PageContainer';
@@ -22,13 +24,18 @@ import {
   createRideRequest,
   getRideServiceErrorMessage,
   getRideBids,
+  getTripTracking,
+  createTripTrackingShare,
+  revokeTripTrackingShare,
   respondToRideBid,
 } from '../../services/rideService';
 import { calculateFare, formatFare, formatDistance, formatDuration } from '../../utils/fareCalculator';
 import type { PlaceSelection } from '../../services/googlePlaces';
 import type { RideBid } from '../../types';
+import type { TripTracking } from '../../types';
 
 export default function PassengerHome() {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const {
     pickup,
@@ -48,12 +55,18 @@ export default function PassengerHome() {
   } = useRideStore();
 
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isBookingRide, setIsBookingRide] = useState(false);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [waitingSeconds, setWaitingSeconds] = useState(0);
   const [offerAmount, setOfferAmount] = useState('');
   const [isSettingOffer, setIsSettingOffer] = useState(false);
   const [rideBids, setRideBids] = useState<RideBid[]>([]);
   const [acceptedBid, setAcceptedBid] = useState<RideBid | null>(null);
   const [respondingBidId, setRespondingBidId] = useState<string | null>(null);
+  const [tracking, setTracking] = useState<TripTracking | null>(null);
+  const [shareInfo, setShareInfo] = useState<{ id: string; url: string } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
   const waitingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-set pickup to user's GPS location
@@ -73,20 +86,37 @@ export default function PassengerHome() {
       setDestination(place);
       setError(null);
 
-      if (!place || !pickup) return;
+      if (!place) {
+        setIsLoadingRoute(false);
+        return;
+      }
 
+      const pickupLocation = pickup ?? (
+        userLocation
+          ? { address: 'Current Location', lat: userLocation.lat, lng: userLocation.lng }
+          : null
+      );
+      if (!pickupLocation) {
+        setError('Pickup location is not ready. Tap the location button on the map, then choose your destination again.');
+        return;
+      }
+
+      setIsLoadingRoute(true);
       try {
         const routeInfo = await fetchCyclingRoute(
-          { lat: pickup.lat, lng: pickup.lng },
+          { lat: pickupLocation.lat, lng: pickupLocation.lng },
           place.location
         );
         const fare = calculateFare(routeInfo.distanceKm);
+        setPickup(pickupLocation);
         setRoute(routeInfo, fare);
       } catch (err) {
         setError(getRideServiceErrorMessage(err, 'Could not fetch route'));
+      } finally {
+        setIsLoadingRoute(false);
       }
     },
-    [pickup, setDestination, setRoute, setError]
+    [pickup, userLocation, setDestination, setPickup, setRoute, setError]
   );
 
   // Submit ride request
@@ -165,6 +195,48 @@ export default function PassengerHome() {
     }
   }, [setError, setStatus]);
 
+  const handleShareTrip = useCallback(async () => {
+    if (!activeRequest) return;
+    setSharing(true);
+    setShareMessage(null);
+    try {
+      let share = shareInfo;
+      if (!share) {
+        const created = await createTripTrackingShare('ride', activeRequest.id);
+        share = {
+          id: created.id,
+          url: created.url,
+        };
+        setShareInfo(share);
+      }
+      if (navigator.share) {
+        await navigator.share({ title: 'Track my Tugende ride', url: share.url });
+      } else {
+        await navigator.clipboard.writeText(share.url);
+        setShareMessage('Tracking link copied');
+      }
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
+      setError(getRideServiceErrorMessage(shareError, 'Could not create a tracking link.'));
+    } finally {
+      setSharing(false);
+    }
+  }, [activeRequest, shareInfo, setError]);
+
+  const handleRevokeShare = useCallback(async () => {
+    if (!shareInfo) return;
+    setSharing(true);
+    try {
+      await revokeTripTrackingShare(shareInfo.id);
+      setShareInfo(null);
+      setShareMessage('Link stopped');
+    } catch (shareError) {
+      setError(getRideServiceErrorMessage(shareError, 'Could not stop sharing.'));
+    } finally {
+      setSharing(false);
+    }
+  }, [shareInfo, setError]);
+
   const handleBeginRequest = useCallback(() => {
     setOfferAmount('');
     setError(null);
@@ -190,6 +262,7 @@ export default function PassengerHome() {
     reset();
     setOfferAmount('');
     setIsSettingOffer(false);
+    setIsBookingRide(false);
     setRideBids([]);
     setAcceptedBid(null);
     setWaitingSeconds(0);
@@ -228,6 +301,29 @@ export default function PassengerHome() {
     };
   }, [activeRequest, setError, status]);
 
+  useEffect(() => {
+    if (!activeRequest || !['accepted', 'in_progress'].includes(status)) return;
+    let active = true;
+    const refreshTracking = async () => {
+      try {
+        const current = await getTripTracking('ride', activeRequest.id);
+        if (!active) return;
+        setTracking(current);
+        if (current.status === 'in_progress' || current.status === 'completed') {
+          setStatus(current.status);
+        }
+      } catch (trackingError) {
+        if (active) setError(getRideServiceErrorMessage(trackingError, 'Could not load live trip status.'));
+      }
+    };
+    void refreshTracking();
+    const interval = window.setInterval(() => void refreshTracking(), 5000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [activeRequest, setError, setStatus, status]);
+
   const formatWaitTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -239,7 +335,10 @@ export default function PassengerHome() {
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-10">
         <div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg">
-          <h1 className="text-xl font-bold text-black tracking-tight">Tugende</h1>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-black tracking-tight">
+            <img src="/icons/tugende-192.png" alt="" className="h-8 w-8 rounded-lg object-cover" />
+            Tugende
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-2xl bg-white/90 px-3 py-1.5 shadow-lg backdrop-blur-md">
@@ -265,10 +364,14 @@ export default function PassengerHome() {
         <MapView
           showUserLocation
           onLocationFound={handleLocationFound}
-          destination={destination}
-          pickupLocation={status === 'confirming' || status === 'requesting' || status === 'waiting' ? pickup : null}
+          destination={status === 'requesting' || status === 'waiting' ? null : destination}
+          pickupLocation={status === 'confirming' || status === 'requesting' || status === 'waiting' || status === 'accepted' || status === 'in_progress' ? pickup : null}
+          showPickupMarker={status !== 'requesting' && status !== 'waiting'}
           searching={status === 'requesting' || status === 'waiting'}
-          routeGeometry={route?.geometry ?? null}
+          routeGeometry={status === 'requesting' || status === 'waiting' ? null : route?.geometry ?? null}
+          bikeLocation={tracking?.driverLocation}
+          bikeHeading={tracking?.driverLocation?.heading}
+          followBikeLocation
         />
       </div>
 
@@ -285,25 +388,60 @@ export default function PassengerHome() {
             className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 space-y-4 z-10"
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-2" />
-            
-            <p className="text-xl font-bold tracking-tight text-black">Book a ride</p>
-
-            {/* Search */}
-            <DestinationSearch
-              userLocation={userLocation}
-              selectedPlace={destination}
-              onSelect={handleDestinationSelect}
-            />
-
-            <Button variant="outline" fullWidth className="py-4">
-              <Package aria-hidden="true" className="mr-2 h-5 w-5" />
-              Send Parcel
-            </Button>
-
-            {error && (
-              <p className="text-sm text-red text-center">{error}</p>
+            {isBookingRide ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold tracking-tight text-black">Take a ride</h2>
+                  <button
+                    type="button"
+                    aria-label="Back to home"
+                    className="rounded-full p-2 hover:bg-gray-100"
+                    onClick={() => {
+                      setIsBookingRide(false);
+                      setDestination(null);
+                      setError(null);
+                    }}
+                  >
+                    <X aria-hidden="true" className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+                <DestinationSearch
+                  userLocation={userLocation}
+                  selectedPlace={destination}
+                  onSelect={handleDestinationSelect}
+                />
+                {destination && status === 'idle' && (
+                  <Button
+                    fullWidth
+                    size="lg"
+                    loading={isLoadingRoute}
+                    disabled={isLoadingRoute || (!pickup && !userLocation)}
+                    onClick={() => void handleDestinationSelect(destination)}
+                  >
+                    <Navigation aria-hidden="true" className="mr-2 h-5 w-5" />
+                    {isLoadingRoute ? 'Calculating route…' : 'Continue'}
+                  </Button>
+                )}
+                {error && <p role="alert" className="text-center text-sm text-red">{error}</p>}
+              </>
+            ) : (
+              <>
+                <Button fullWidth size="lg" className="py-4" onClick={() => setIsBookingRide(true)}>
+                  <Bike aria-hidden="true" className="mr-2 h-5 w-5" />
+                  Take a ride
+                </Button>
+                <Button
+                  variant="outline"
+                  fullWidth
+                  size="lg"
+                  className="py-4"
+                  onClick={() => navigate('/parcels/new')}
+                >
+                  <Package aria-hidden="true" className="mr-2 h-5 w-5" />
+                  Send a parcel
+                </Button>
+              </>
             )}
-
           </motion.div>
         )}
 
@@ -434,53 +572,64 @@ export default function PassengerHome() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-8 pb-12 z-10 flex flex-col items-center"
+            className="absolute bottom-4 left-4 right-4 z-10 flex items-center gap-3 rounded-2xl bg-white p-4 shadow-lg"
           >
-            <Loader2 className="w-10 h-10 text-sunset animate-spin mb-4" />
-            <p className="text-lg font-bold tracking-tight text-black">Finding a driver…</p>
+              <Loader2 className="h-5 w-5 animate-spin text-sunset" />
+              <p className="text-sm font-bold tracking-tight text-black">Sending ride request…</p>
           </motion.div>
         )}
 
         {/* ═══ WAITING STATE ═══ */}
-        {(status === 'waiting' || status === 'accepted') && (
+        {(status === 'waiting' || status === 'accepted' || status === 'in_progress' || status === 'completed') && (
           <motion.div
             key={status}
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 z-10"
+            className={`absolute left-4 right-4 z-10 bg-white shadow-lg ${
+              status === 'waiting'
+                ? rideBids.some((bid) => bid.status === 'pending')
+                  ? 'bottom-4 max-h-[62vh] overflow-y-auto rounded-3xl p-4'
+                  : 'bottom-4 rounded-2xl p-4'
+                : 'bottom-0 rounded-t-3xl p-6 pb-10'
+            }`}
           >
-            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-6" />
+            {status !== 'waiting' && (
+              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-6" />
+            )}
 
             <div className="flex max-h-[65vh] flex-col items-center overflow-y-auto text-center">
-              {/* Pulsing bike animation */}
-              <div className="relative mb-4">
-                <motion.div
-                  animate={{ scale: [1, 1.3, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute inset-0 bg-sunset/20 rounded-full"
-                  style={{ width: 80, height: 80, top: -10, left: -10 }}
-                />
-                <div className="w-16 h-16 bg-sunset/10 rounded-full flex items-center justify-center relative z-10">
-                  <Bike aria-hidden="true" className="h-8 w-8 text-sunset" />
+              {status !== 'waiting' && (
+                <div className="relative mb-4">
+                  <motion.div
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    className="absolute inset-0 bg-sunset/20 rounded-full"
+                    style={{ width: 80, height: 80, top: -10, left: -10 }}
+                  />
+                  <div className="w-16 h-16 bg-sunset/10 rounded-full flex items-center justify-center relative z-10">
+                    <Bike aria-hidden="true" className="h-8 w-8 text-sunset" />
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <h2 className="text-xl font-bold tracking-tight text-black mb-1">
-                {status === 'accepted' ? 'Ride confirmed' : 'Finding a driver…'}
+              <h2 className={`font-bold tracking-tight text-black ${status === 'waiting' ? 'text-base' : 'mb-1 text-xl'}`}>
+                {status === 'waiting' ? 'Finding a driver…' : status === 'in_progress' ? 'Ride in progress' : status === 'completed' ? 'Ride complete' : 'Ride confirmed'}
               </h2>
               
               {/* Timer */}
-              <div className="flex items-center gap-2 bg-gray-50 rounded-full px-4 py-2 mt-3 mb-6">
-                <Clock className="w-4 h-4 text-gray-400" />
-                <span className="text-sm font-mono font-bold text-black">
-                  {formatWaitTime(waitingSeconds)}
-                </span>
-              </div>
+              {status !== 'waiting' && (
+                <div className="flex items-center gap-2 bg-gray-50 rounded-full px-4 py-2 mt-3 mb-6">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-mono font-bold text-black">
+                    {formatWaitTime(waitingSeconds)}
+                  </span>
+                </div>
+              )}
 
               {/* Ride details summary */}
-              <div className="w-full bg-gray-50 rounded-2xl p-4 mb-6 text-left">
+              {status !== 'waiting' && <div className="w-full bg-gray-50 rounded-2xl p-4 mb-6 text-left">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-2 h-2 rounded-full bg-gray-500" />
                   <span className="text-sm font-medium text-gray-700 truncate">{pickup?.address}</span>
@@ -497,9 +646,9 @@ export default function PassengerHome() {
                       : '—'}
                   </span>
                 </div>
-              </div>
+              </div>}
 
-              {status === 'accepted' && acceptedBid && (
+              {status !== 'waiting' && acceptedBid && (
                 <div className="w-full rounded-2xl border border-sunset/20 bg-sunset/5 p-4 mb-4 text-left">
                   <p className="text-xs font-semibold uppercase tracking-wide text-sunset">Driver</p>
                   <p className="mt-1 text-lg font-bold tracking-tight text-black">{acceptedBid.driverName}</p>
@@ -512,15 +661,37 @@ export default function PassengerHome() {
                 </div>
               )}
 
+              {status !== 'waiting' && (
+                <div className="mb-4 w-full space-y-2">
+                  {status !== 'completed' && (
+                    <>
+                      <p className="text-sm font-medium text-gray-600">
+                        {tracking?.driverLocation ? 'Driver is on the way' : 'Waiting for driver to start'}
+                      </p>
+                      <Button fullWidth loading={sharing} onClick={() => void handleShareTrip()}>
+                        <Share2 aria-hidden="true" className="mr-2 h-4 w-4" />
+                        Share trip
+                      </Button>
+                    </>
+                  )}
+                  {shareInfo && (
+                    <Button variant="outline" disabled={sharing} onClick={() => void handleRevokeShare()}>
+                      Stop sharing
+                    </Button>
+                  )}
+                  {shareMessage && <p className="text-sm text-gray-600">{shareMessage}</p>}
+                </div>
+              )}
+
               {status === 'waiting' && (
                 <div className="w-full mb-5 text-left">
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="font-bold text-black">Driver bids</h3>
                     <span className="text-xs font-medium text-gray-500">{rideBids.length}</span>
                   </div>
-                  {rideBids.length === 0 ? (
-                    <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
-                      No bids yet
+                  {rideBids.filter((bid) => bid.status === 'pending').length === 0 ? (
+                    <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-600">
+                      Searching nearby
                     </p>
                   ) : (
                     <div className="space-y-3">
@@ -564,6 +735,20 @@ export default function PassengerHome() {
               {status === 'waiting' && (
                 <Button variant="ghost" fullWidth onClick={handleCancel}>
                   <X className="mr-2 h-4 w-4" /> Cancel Request
+                </Button>
+              )}
+              {status === 'completed' && (
+                <Button
+                  fullWidth
+                  onClick={() => {
+                    reset();
+                    setTracking(null);
+                    setShareInfo(null);
+                    setShareMessage(null);
+                    setAcceptedBid(null);
+                  }}
+                >
+                  Done
                 </Button>
               )}
             </div>
