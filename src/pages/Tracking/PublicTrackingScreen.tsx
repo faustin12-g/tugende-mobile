@@ -49,7 +49,7 @@ export default function PublicTrackingScreen() {
   const isMoving = tracking?.status === 'in_progress';
 
   return (
-    <main className="relative h-screen min-h-0 bg-gray-100">
+    <main className="relative h-dvh min-h-0 bg-gray-100">
       <div className="absolute inset-0">
         {tracking && (
           <MapView
@@ -70,7 +70,7 @@ export default function PublicTrackingScreen() {
         )}
       </div>
 
-      <header className="absolute left-4 right-4 top-4 z-10 rounded-2xl bg-white/95 p-4 shadow-lg backdrop-blur">
+      <header className="absolute left-4 right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-10 rounded-2xl bg-white/95 p-4 shadow-lg backdrop-blur">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunset/10 text-sunset">
             {tracking?.type === 'parcel' ? (
@@ -95,7 +95,7 @@ export default function PublicTrackingScreen() {
         </div>
       </header>
 
-      <section className="absolute bottom-4 left-4 right-4 z-10 rounded-2xl bg-white p-4 shadow-lg">
+      <section className="absolute bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-4 right-4 z-10 rounded-2xl bg-white p-4 shadow-lg">
         {tracking ? (
           <div className="space-y-3">
             <p className="flex items-start gap-2 text-sm font-medium text-gray-700">

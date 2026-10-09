@@ -319,9 +319,9 @@ export default function DriverHome() {
   };
 
   return (
-    <PageContainer withPadding={false} className="relative h-screen !min-h-0">
+    <PageContainer withPadding={false} className="relative h-dvh !min-h-0">
       {/* Header — floats over the map */}
-      <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-10">
+      <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
         <div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg">
           <h1 className="text-lg font-bold text-black tracking-tight">
             <img
@@ -365,7 +365,7 @@ export default function DriverHome() {
       </div>
 
       {/* Bottom Section — floats over the map */}
-      <div className="absolute bottom-0 left-0 right-0 max-h-[55vh] overflow-y-auto bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 z-10">
+      <div className="absolute bottom-0 left-0 right-0 max-h-[min(60dvh,calc(100dvh-env(safe-area-inset-top)-5rem))] overflow-y-auto overscroll-contain scroll-smooth rounded-t-3xl bg-white p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-10">
         <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-4 sticky top-0" />
 
         {activeTrips.length > 0 && (

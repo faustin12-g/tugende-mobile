@@ -12,7 +12,13 @@ export const PageContainer: React.FC<PageContainerProps> = ({
   withPadding = true
 }) => {
   return (
-    <div className={`min-h-screen bg-white text-black flex flex-col ${withPadding ? 'px-6 py-8' : ''} ${className}`}>
+    <div
+      className={`min-h-dvh bg-white text-black flex flex-col ${
+        withPadding
+          ? 'overflow-y-auto overscroll-y-contain px-6 pt-[calc(env(safe-area-inset-top)+2rem)] pb-[calc(env(safe-area-inset-bottom)+2rem)]'
+          : ''
+      } ${className}`}
+    >
       {children}
     </div>
   );

@@ -275,7 +275,7 @@ export default function ParcelDeliveryScreen() {
   const isParcelRequestActive = step === 'requesting' || step === 'waiting';
 
   return (
-    <PageContainer withPadding={false} className="relative h-screen !min-h-0">
+    <PageContainer withPadding={false} className="relative h-dvh !min-h-0">
       <div className="absolute inset-0">
         <MapView
           showUserLocation
@@ -291,7 +291,7 @@ export default function ParcelDeliveryScreen() {
         />
       </div>
 
-      <header className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-4 pt-12">
+      <header className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
         <button
           type="button"
           onClick={() => (step === 'offer' ? setStep('details') : navigate('/home'))}
@@ -306,12 +306,14 @@ export default function ParcelDeliveryScreen() {
         <MapSettings />
       </header>
 
-      <section className={`absolute z-10 overflow-y-auto bg-white shadow-lg ${
+      <section
+        style={{ maxHeight: 'min(78dvh, calc(100dvh - env(safe-area-inset-top) - 5rem))' }}
+        className={`absolute z-10 overflow-y-auto overscroll-contain scroll-smooth bg-white pb-[calc(env(safe-area-inset-bottom)+1.5rem)] shadow-lg ${
         step === 'details' || step === 'offer'
-          ? 'bottom-0 left-0 right-0 max-h-[72vh] rounded-t-3xl p-5 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]'
+          ? 'bottom-0 left-0 right-0 rounded-t-3xl p-5 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]'
           : step === 'waiting' && pendingParcelBids.length > 0
-            ? 'bottom-4 left-4 right-4 max-h-[62vh] rounded-3xl p-4'
-            : 'bottom-4 left-4 right-4 rounded-2xl p-4'
+            ? 'bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-4 right-4 rounded-3xl p-4'
+            : 'bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-4 right-4 rounded-2xl p-4'
       }`}>
         {(step === 'details' || step === 'offer') && (
           <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-gray-200" />

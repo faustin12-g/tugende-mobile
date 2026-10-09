@@ -331,9 +331,9 @@ export default function PassengerHome() {
   };
 
   return (
-    <PageContainer withPadding={false} className="relative h-screen !min-h-0">
+    <PageContainer withPadding={false} className="relative h-dvh !min-h-0">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-10">
+      <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
         <div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg">
           <h1 className="flex items-center gap-2 text-xl font-bold text-black tracking-tight">
             <img src="/icons/tugende-192.png" alt="" className="h-8 w-8 rounded-lg object-cover" />
@@ -381,11 +381,11 @@ export default function PassengerHome() {
         {status === 'idle' && (
           <motion.div
             key="idle"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 space-y-4 z-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute bottom-0 left-0 right-0 z-10 max-h-[min(78dvh,calc(100dvh-env(safe-area-inset-top)-5rem))] overflow-y-auto overscroll-contain scroll-smooth rounded-t-3xl bg-white p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]"
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-2" />
             {isBookingRide ? (
@@ -449,11 +449,11 @@ export default function PassengerHome() {
         {status === 'confirming' && route && destination && (
           <motion.div
             key="confirming"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 z-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute bottom-0 left-0 right-0 z-10 max-h-[min(82dvh,calc(100dvh-env(safe-area-inset-top)-4rem))] overflow-y-auto overscroll-contain scroll-smooth rounded-t-3xl bg-white p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]"
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-4" />
 
@@ -569,9 +569,10 @@ export default function PassengerHome() {
         {status === 'requesting' && (
           <motion.div
             key="requesting"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             className="absolute bottom-4 left-4 right-4 z-10 flex items-center gap-3 rounded-2xl bg-white p-4 shadow-lg"
           >
               <Loader2 className="h-5 w-5 animate-spin text-sunset" />
@@ -583,23 +584,23 @@ export default function PassengerHome() {
         {(status === 'waiting' || status === 'accepted' || status === 'in_progress' || status === 'completed') && (
           <motion.div
             key={status}
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className={`absolute left-4 right-4 z-10 bg-white shadow-lg ${
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className={`absolute left-4 right-4 z-10 max-h-[calc(100dvh-env(safe-area-inset-bottom)-1rem)] overflow-y-auto overscroll-contain scroll-smooth bg-white pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-lg ${
               status === 'waiting'
                 ? rideBids.some((bid) => bid.status === 'pending')
-                  ? 'bottom-4 max-h-[62vh] overflow-y-auto rounded-3xl p-4'
-                  : 'bottom-4 rounded-2xl p-4'
-                : 'bottom-0 rounded-t-3xl p-6 pb-10'
+                  ? 'bottom-[calc(env(safe-area-inset-bottom)+1rem)] rounded-3xl p-4'
+                  : 'bottom-[calc(env(safe-area-inset-bottom)+1rem)] rounded-2xl p-4'
+                : 'bottom-0 rounded-t-3xl p-6'
             }`}
           >
             {status !== 'waiting' && (
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-6" />
             )}
 
-            <div className="flex max-h-[65vh] flex-col items-center overflow-y-auto text-center">
+            <div className="flex flex-col items-center text-center">
               {status !== 'waiting' && (
                 <div className="relative mb-4">
                   <motion.div
