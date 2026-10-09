@@ -55,6 +55,7 @@ export default function PassengerHome() {
   } = useRideStore();
 
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isBookingRide, setIsBookingRide] = useState(false);
   const [waitingSeconds, setWaitingSeconds] = useState(0);
   const [offerAmount, setOfferAmount] = useState('');
   const [isSettingOffer, setIsSettingOffer] = useState(false);
@@ -243,6 +244,7 @@ export default function PassengerHome() {
     reset();
     setOfferAmount('');
     setIsSettingOffer(false);
+    setIsBookingRide(false);
     setRideBids([]);
     setAcceptedBid(null);
     setWaitingSeconds(0);
@@ -344,10 +346,11 @@ export default function PassengerHome() {
         <MapView
           showUserLocation
           onLocationFound={handleLocationFound}
-          destination={destination}
+          destination={status === 'requesting' || status === 'waiting' ? null : destination}
           pickupLocation={status === 'confirming' || status === 'requesting' || status === 'waiting' || status === 'accepted' || status === 'in_progress' ? pickup : null}
+          showPickupMarker={status !== 'requesting' && status !== 'waiting'}
           searching={status === 'requesting' || status === 'waiting'}
-          routeGeometry={route?.geometry ?? null}
+          routeGeometry={status === 'requesting' || status === 'waiting' ? null : route?.geometry ?? null}
           bikeLocation={tracking?.driverLocation}
           bikeHeading={tracking?.driverLocation?.heading}
           followBikeLocation
@@ -367,30 +370,48 @@ export default function PassengerHome() {
             className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 space-y-4 z-10"
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-2" />
-            
-            <p className="text-xl font-bold tracking-tight text-black">Book a ride</p>
-
-            {/* Search */}
-            <DestinationSearch
-              userLocation={userLocation}
-              selectedPlace={destination}
-              onSelect={handleDestinationSelect}
-            />
-
-            <Button
-              variant="outline"
-              fullWidth
-              className="py-4"
-              onClick={() => navigate('/parcels/new')}
-            >
-              <Package aria-hidden="true" className="mr-2 h-5 w-5" />
-              Send Parcel
-            </Button>
-
-            {error && (
-              <p className="text-sm text-red text-center">{error}</p>
+            {isBookingRide ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold tracking-tight text-black">Take a ride</h2>
+                  <button
+                    type="button"
+                    aria-label="Back to home"
+                    className="rounded-full p-2 hover:bg-gray-100"
+                    onClick={() => {
+                      setIsBookingRide(false);
+                      setDestination(null);
+                      setError(null);
+                    }}
+                  >
+                    <X aria-hidden="true" className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+                <DestinationSearch
+                  userLocation={userLocation}
+                  selectedPlace={destination}
+                  onSelect={handleDestinationSelect}
+                />
+                {error && <p role="alert" className="text-center text-sm text-red">{error}</p>}
+              </>
+            ) : (
+              <>
+                <Button fullWidth size="lg" className="py-4" onClick={() => setIsBookingRide(true)}>
+                  <Bike aria-hidden="true" className="mr-2 h-5 w-5" />
+                  Take a ride
+                </Button>
+                <Button
+                  variant="outline"
+                  fullWidth
+                  size="lg"
+                  className="py-4"
+                  onClick={() => navigate('/parcels/new')}
+                >
+                  <Package aria-hidden="true" className="mr-2 h-5 w-5" />
+                  Send a parcel
+                </Button>
+              </>
             )}
-
           </motion.div>
         )}
 
@@ -521,10 +542,10 @@ export default function PassengerHome() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-8 pb-12 z-10 flex flex-col items-center"
+            className="absolute bottom-4 left-4 right-4 z-10 flex items-center gap-3 rounded-2xl bg-white p-4 shadow-lg"
           >
-            <Loader2 className="w-10 h-10 text-sunset animate-spin mb-4" />
-            <p className="text-lg font-bold tracking-tight text-black">Finding a driver…</p>
+              <Loader2 className="h-5 w-5 animate-spin text-sunset" />
+              <p className="text-sm font-bold tracking-tight text-black">Sending ride request…</p>
           </motion.div>
         )}
 
@@ -536,38 +557,49 @@ export default function PassengerHome() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 z-10"
+            className={`absolute left-4 right-4 z-10 bg-white shadow-lg ${
+              status === 'waiting'
+                ? rideBids.some((bid) => bid.status === 'pending')
+                  ? 'bottom-4 max-h-[62vh] overflow-y-auto rounded-3xl p-4'
+                  : 'bottom-4 rounded-2xl p-4'
+                : 'bottom-0 rounded-t-3xl p-6 pb-10'
+            }`}
           >
-            <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-6" />
+            {status !== 'waiting' && (
+              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-6" />
+            )}
 
             <div className="flex max-h-[65vh] flex-col items-center overflow-y-auto text-center">
-              {/* Pulsing bike animation */}
-              <div className="relative mb-4">
-                <motion.div
-                  animate={{ scale: [1, 1.3, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute inset-0 bg-sunset/20 rounded-full"
-                  style={{ width: 80, height: 80, top: -10, left: -10 }}
-                />
-                <div className="w-16 h-16 bg-sunset/10 rounded-full flex items-center justify-center relative z-10">
-                  <Bike aria-hidden="true" className="h-8 w-8 text-sunset" />
+              {status !== 'waiting' && (
+                <div className="relative mb-4">
+                  <motion.div
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    className="absolute inset-0 bg-sunset/20 rounded-full"
+                    style={{ width: 80, height: 80, top: -10, left: -10 }}
+                  />
+                  <div className="w-16 h-16 bg-sunset/10 rounded-full flex items-center justify-center relative z-10">
+                    <Bike aria-hidden="true" className="h-8 w-8 text-sunset" />
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <h2 className="text-xl font-bold tracking-tight text-black mb-1">
+              <h2 className={`font-bold tracking-tight text-black ${status === 'waiting' ? 'text-base' : 'mb-1 text-xl'}`}>
                 {status === 'waiting' ? 'Finding a driver…' : status === 'in_progress' ? 'Ride in progress' : status === 'completed' ? 'Ride complete' : 'Ride confirmed'}
               </h2>
               
               {/* Timer */}
-              <div className="flex items-center gap-2 bg-gray-50 rounded-full px-4 py-2 mt-3 mb-6">
-                <Clock className="w-4 h-4 text-gray-400" />
-                <span className="text-sm font-mono font-bold text-black">
-                  {formatWaitTime(waitingSeconds)}
-                </span>
-              </div>
+              {status !== 'waiting' && (
+                <div className="flex items-center gap-2 bg-gray-50 rounded-full px-4 py-2 mt-3 mb-6">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-mono font-bold text-black">
+                    {formatWaitTime(waitingSeconds)}
+                  </span>
+                </div>
+              )}
 
               {/* Ride details summary */}
-              <div className="w-full bg-gray-50 rounded-2xl p-4 mb-6 text-left">
+              {status !== 'waiting' && <div className="w-full bg-gray-50 rounded-2xl p-4 mb-6 text-left">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-2 h-2 rounded-full bg-gray-500" />
                   <span className="text-sm font-medium text-gray-700 truncate">{pickup?.address}</span>
@@ -584,7 +616,7 @@ export default function PassengerHome() {
                       : '—'}
                   </span>
                 </div>
-              </div>
+              </div>}
 
               {status !== 'waiting' && acceptedBid && (
                 <div className="w-full rounded-2xl border border-sunset/20 bg-sunset/5 p-4 mb-4 text-left">
@@ -627,9 +659,9 @@ export default function PassengerHome() {
                     <h3 className="font-bold text-black">Driver bids</h3>
                     <span className="text-xs font-medium text-gray-500">{rideBids.length}</span>
                   </div>
-                  {rideBids.length === 0 ? (
-                    <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
-                      No bids yet
+                  {rideBids.filter((bid) => bid.status === 'pending').length === 0 ? (
+                    <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-600">
+                      Searching nearby
                     </p>
                   ) : (
                     <div className="space-y-3">

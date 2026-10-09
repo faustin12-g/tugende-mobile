@@ -33,6 +33,8 @@ export interface MapViewProps {
   routeGeometry?: GeoJSON.LineString | null;
   /** Location of the bicycle/driver on the map */
   bikeLocation?: { lat: number; lng: number } | null;
+  /** Whether to display a pin at the pickup location */
+  showPickupMarker?: boolean;
   /** Heading in degrees clockwise from north for the driver marker */
   bikeHeading?: number | null;
   /** Keep the map camera centered on the live driver marker */
@@ -53,6 +55,7 @@ export default function MapView({
   pickupLocation = null,
   routeGeometry = null,
   bikeLocation = null,
+  showPickupMarker = true,
   bikeHeading = null,
   followBikeLocation = false,
   searching = false,
@@ -158,7 +161,7 @@ export default function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    if (!pickupLocation) {
+    if (!pickupLocation || !showPickupMarker) {
       pickupMarkerRef.current?.remove();
       pickupMarkerRef.current = null;
       return;
@@ -172,7 +175,7 @@ export default function MapView({
     pickupMarkerRef.current
       .setLngLat([pickupLocation.lng, pickupLocation.lat])
       .addTo(map);
-  }, [pickupLocation]);
+  }, [pickupLocation, showPickupMarker]);
 
   // ── Bike marker (driver en route) ──
   useEffect(() => {

@@ -271,6 +271,8 @@ export default function ParcelDeliveryScreen() {
     recipientName.trim().length > 0 &&
     recipientPhone.trim().length >= 7;
   const offerValid = Number.isSafeInteger(Number(offerAmount)) && Number(offerAmount) > 0;
+  const pendingParcelBids = parcelBids.filter((bid) => bid.status === 'pending');
+  const isParcelRequestActive = step === 'requesting' || step === 'waiting';
 
   return (
     <PageContainer withPadding={false} className="relative h-screen !min-h-0">
@@ -278,9 +280,10 @@ export default function ParcelDeliveryScreen() {
         <MapView
           showUserLocation
           onLocationFound={handleLocationFound}
-          destination={destination}
+          destination={isParcelRequestActive ? null : destination}
           pickupLocation={pickup}
-          routeGeometry={route?.geometry ?? null}
+          showPickupMarker={!isParcelRequestActive}
+          routeGeometry={isParcelRequestActive ? null : route?.geometry ?? null}
           searching={step === 'requesting' || step === 'waiting'}
           bikeLocation={tracking?.driverLocation}
           bikeHeading={tracking?.driverLocation?.heading}
@@ -303,8 +306,16 @@ export default function ParcelDeliveryScreen() {
         <MapSettings />
       </header>
 
-      <section className="absolute bottom-0 left-0 right-0 z-10 max-h-[72vh] overflow-y-auto rounded-t-3xl bg-white p-5 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-gray-200" />
+      <section className={`absolute z-10 overflow-y-auto bg-white shadow-lg ${
+        step === 'details' || step === 'offer'
+          ? 'bottom-0 left-0 right-0 max-h-[72vh] rounded-t-3xl p-5 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]'
+          : step === 'waiting' && pendingParcelBids.length > 0
+            ? 'bottom-4 left-4 right-4 max-h-[62vh] rounded-3xl p-4'
+            : 'bottom-4 left-4 right-4 rounded-2xl p-4'
+      }`}>
+        {(step === 'details' || step === 'offer') && (
+          <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-gray-200" />
+        )}
 
         {step === 'details' && (
           <div className="space-y-4">
@@ -494,13 +505,69 @@ export default function ParcelDeliveryScreen() {
         )}
 
         {step === 'requesting' && (
-          <div className="flex flex-col items-center py-6">
-            <Loader2 aria-hidden="true" className="mb-3 h-9 w-9 animate-spin text-sunset" />
-            <h2 className="text-lg font-bold text-black">Finding a rider…</h2>
+          <div className="flex items-center gap-3">
+            <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin text-sunset" />
+            <h2 className="text-base font-bold text-black">Sending parcel request…</h2>
           </div>
         )}
 
-        {(step === 'waiting' || step === 'accepted' || step === 'in_progress' || step === 'completed') && (
+        {step === 'waiting' && (
+          <div className="space-y-3">
+            {pendingParcelBids.length === 0 ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-sunset" />
+                  <h2 className="font-bold text-black">Finding a rider…</h2>
+                </div>
+                <p className="text-sm font-medium text-gray-600">Your request is on the map</p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-black">Rider bids</h2>
+                  <span className="rounded-full bg-sunset/10 px-3 py-1 text-sm font-bold text-sunset">
+                    {pendingParcelBids.length}
+                  </span>
+                </div>
+                {pendingParcelBids.map((bid) => (
+                  <div key={bid.id} className="rounded-xl border border-gray-100 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-black">{bid.driverName}</span>
+                      <span className="font-extrabold text-sunset">{formatFare(bid.proposedFare)}</span>
+                    </div>
+                    {bid.bicycleNumber && (
+                      <p className="mt-1 text-sm text-gray-600">Bicycle {bid.bicycleNumber}</p>
+                    )}
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        variant="ghost"
+                        disabled={respondingBid}
+                        onClick={() => void handleBidResponse(bid, false)}
+                        className="flex-1"
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        disabled={respondingBid}
+                        onClick={() => void handleBidResponse(bid, true)}
+                        className="flex-1"
+                      >
+                        Accept
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            {error && <p role="alert" className="text-sm font-medium text-red">{error}</p>}
+            <Button variant="ghost" fullWidth loading={loading} onClick={() => void handleCancel()}>
+              <X aria-hidden="true" className="mr-2 h-4 w-4" />
+              Cancel request
+            </Button>
+          </div>
+        )}
+
+        {(step === 'accepted' || step === 'in_progress' || step === 'completed') && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sunset/10">
@@ -508,9 +575,9 @@ export default function ParcelDeliveryScreen() {
               </div>
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-black">
-                  {step === 'waiting' ? 'Finding a rider…' : step === 'in_progress' ? 'Delivery in progress' : step === 'completed' ? 'Delivery complete' : 'Delivery confirmed'}
+                  {step === 'in_progress' ? 'Delivery in progress' : step === 'completed' ? 'Delivery complete' : 'Delivery confirmed'}
                 </h2>
-                {step !== 'waiting' && acceptedBid && (
+                {acceptedBid && (
                   <p className="text-sm font-semibold text-sunset">
                     {acceptedBid.driverName} · {formatFare(acceptedBid.proposedFare)}
                   </p>
@@ -518,84 +585,24 @@ export default function ParcelDeliveryScreen() {
               </div>
             </div>
 
-            <div className="rounded-xl bg-gray-50 p-4">
-              <p className="truncate text-sm font-medium text-gray-700">{pickup?.address}</p>
-              <p className="my-1 text-xs font-semibold uppercase tracking-wide text-gray-500">to</p>
-              <p className="truncate text-sm font-medium text-gray-700">{destination?.address}</p>
-              <div className="mt-3 flex justify-between border-t border-gray-200 pt-3 text-sm">
-                <span className="font-semibold text-gray-700">Your offer</span>
-                <span className="font-extrabold text-sunset">{formatFare(Number(offerAmount))}</span>
-              </div>
-            </div>
-
-            {step === 'waiting' && (
-              <div className="space-y-3">
-                <h3 className="font-bold text-black">Driver bids · {parcelBids.length}</h3>
-                {parcelBids.filter((bid) => bid.status === 'pending').length === 0 ? (
-                  <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
-                    No bids yet
-                  </p>
-                ) : (
-                  parcelBids.filter((bid) => bid.status === 'pending').map((bid) => (
-                    <div key={bid.id} className="rounded-xl border border-gray-100 p-4">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-black">{bid.driverName}</span>
-                        <span className="font-extrabold text-sunset">{formatFare(bid.proposedFare)}</span>
-                      </div>
-                      {bid.bicycleNumber && (
-                        <p className="mt-1 text-sm text-gray-600">Bicycle {bid.bicycleNumber}</p>
-                      )}
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          variant="ghost"
-                          disabled={respondingBid}
-                          onClick={() => void handleBidResponse(bid, false)}
-                          className="flex-1"
-                        >
-                          Decline
-                        </Button>
-                        <Button
-                          disabled={respondingBid}
-                          onClick={() => void handleBidResponse(bid, true)}
-                          className="flex-1"
-                        >
-                          Accept
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
             {error && <p role="alert" className="text-sm font-medium text-red">{error}</p>}
-            {step === 'waiting' && (
-              <Button variant="ghost" fullWidth loading={loading} onClick={() => void handleCancel()}>
-                <X aria-hidden="true" className="mr-2 h-4 w-4" />
-                Cancel delivery
+            {step !== 'completed' && (
+              <>
+                <p className="text-sm font-medium text-gray-600">
+                  {tracking?.driverLocation ? 'Driver is on the way' : 'Waiting for driver to start'}
+                </p>
+                <Button fullWidth loading={sharing} onClick={() => void handleShareTrip()}>
+                  <Share2 aria-hidden="true" className="mr-2 h-4 w-4" />
+                  Share delivery
+                </Button>
+              </>
+            )}
+            {shareInfo && (
+              <Button variant="outline" disabled={sharing} onClick={() => void handleRevokeShare()}>
+                Stop sharing
               </Button>
             )}
-            {step !== 'waiting' && (
-              <div className="space-y-2">
-                {step !== 'completed' && (
-                  <>
-                    <p className="text-sm font-medium text-gray-600">
-                      {tracking?.driverLocation ? 'Driver is on the way' : 'Waiting for driver to start'}
-                    </p>
-                    <Button fullWidth loading={sharing} onClick={() => void handleShareTrip()}>
-                      <Share2 aria-hidden="true" className="mr-2 h-4 w-4" />
-                      Share delivery
-                    </Button>
-                  </>
-                )}
-                {shareInfo && (
-                  <Button variant="outline" disabled={sharing} onClick={() => void handleRevokeShare()}>
-                    Stop sharing
-                  </Button>
-                )}
-                {shareMessage && <p className="text-sm text-gray-600">{shareMessage}</p>}
-              </div>
-            )}
+            {shareMessage && <p className="text-sm text-gray-600">{shareMessage}</p>}
             {step === 'completed' && (
               <Button fullWidth onClick={() => navigate('/home')}>Done</Button>
             )}
