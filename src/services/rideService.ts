@@ -1,7 +1,14 @@
 import { fetchCyclingRoute, type RouteInfo } from './directions';
 import { calculateFare } from '../utils/fareCalculator';
 import { getSupabaseClient } from './supabase';
-import type { NearbyRideRequest, RideBid, RideRequest } from '../types';
+import type {
+  NearbyParcelDelivery,
+  NearbyRideRequest,
+  ParcelBid,
+  ParcelDelivery,
+  RideBid,
+  RideRequest,
+} from '../types';
 
 interface CreateRideParams {
   passengerId: string;
@@ -34,7 +41,10 @@ export function getRideServiceErrorMessage(error: unknown, fallback: string): st
     serviceError.status === 404 ||
     /could not find the (table|column|function)|relation .* does not exist/i.test(message)
   ) {
-    return 'Ride database setup is missing or not refreshed in Supabase. Run supabase/ride-offer-migration.sql in the Supabase SQL Editor, then refresh the app.';
+    const migration = /parcel/i.test(message)
+      ? 'supabase/parcel-delivery-migration.sql'
+      : 'supabase/ride-offer-migration.sql';
+    return `Database setup is missing or not refreshed in Supabase. Run ${migration} in the Supabase SQL Editor, then refresh the app.`;
   }
 
   return [message, details, hint].filter(Boolean).join(' — ') || fallback;
@@ -302,6 +312,205 @@ export async function respondToRideBid(bidId: string, accept: boolean): Promise<
   });
 
   if (error) throw error;
+}
+
+interface CreateParcelDeliveryParams {
+  senderId: string;
+  pickup: { address: string; lat: number; lng: number };
+  destination: { address: string; lat: number; lng: number };
+  senderName: string;
+  senderPhone: string;
+  recipientName: string;
+  recipientPhone: string;
+  senderOffer: number;
+}
+
+export async function createParcelDelivery(
+  params: CreateParcelDeliveryParams
+): Promise<ParcelDelivery> {
+  const route = await fetchCyclingRoute(params.pickup, params.destination);
+  const estimatedFare = calculateFare(route.distanceKm);
+  const { data, error } = await getSupabaseClient()
+    .from('parcel_deliveries')
+    .insert({
+      sender_id: params.senderId,
+      pickup_address: params.pickup.address,
+      pickup_lat: params.pickup.lat,
+      pickup_lng: params.pickup.lng,
+      destination_address: params.destination.address,
+      destination_lat: params.destination.lat,
+      destination_lng: params.destination.lng,
+      sender_name: params.senderName,
+      sender_phone: params.senderPhone,
+      recipient_name: params.recipientName,
+      recipient_phone: params.recipientPhone,
+      distance_km: route.distanceKm,
+      duration_min: route.durationMin,
+      estimated_fare: estimatedFare,
+      sender_offer: params.senderOffer,
+    })
+    .select(
+      'id, sender_id, pickup_address, pickup_lat, pickup_lng, destination_address, destination_lat, destination_lng, distance_km, duration_min, estimated_fare, sender_offer, status, created_at'
+    )
+    .single();
+
+  if (error) throw error;
+  return {
+    ...mapParcelDelivery({
+      ...data,
+      sender_name: params.senderName,
+      sender_phone: params.senderPhone,
+      recipient_name: params.recipientName,
+      recipient_phone: params.recipientPhone,
+    }),
+  };
+}
+
+export async function cancelParcelDelivery(deliveryId: string): Promise<void> {
+  const { error } = await getSupabaseClient()
+    .from('parcel_deliveries')
+    .update({ status: 'cancelled' })
+    .eq('id', deliveryId);
+
+  if (error) throw error;
+}
+
+export async function getNearbyParcelDeliveries(
+  location: { lat: number; lng: number },
+  radiusMeters = 2000
+): Promise<NearbyParcelDelivery[]> {
+  const { data, error } = await getSupabaseClient()
+    .from('parcel_deliveries')
+    .select(
+      'id, sender_id, pickup_address, pickup_lat, pickup_lng, destination_address, destination_lat, destination_lng, distance_km, duration_min, estimated_fare, sender_offer, status, created_at'
+    )
+    .in('status', ['pending', 'bidding'])
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+  if (!data?.length) return [];
+
+  const deliveries = data
+    .map((row) => ({
+      id: row.id,
+      senderId: row.sender_id,
+      pickup: {
+        address: row.pickup_address,
+        lat: row.pickup_lat,
+        lng: row.pickup_lng,
+      },
+      destination: {
+        address: row.destination_address,
+        lat: row.destination_lat,
+        lng: row.destination_lng,
+      },
+      distanceKm: Number(row.distance_km),
+      durationMin: row.duration_min,
+      estimatedFare: row.estimated_fare,
+      senderOffer: row.sender_offer,
+      status: row.status as ParcelDelivery['status'],
+      createdAt: row.created_at,
+      pickupDistanceMeters: distanceBetweenMeters(location, {
+        lat: row.pickup_lat,
+        lng: row.pickup_lng,
+      }),
+    } satisfies NearbyParcelDelivery))
+    .filter((delivery) => delivery.pickupDistanceMeters <= radiusMeters);
+  if (!deliveries.length) return [];
+
+  const { data: bids, error: bidsError } = await getSupabaseClient()
+    .from('parcel_bids')
+    .select('parcel_delivery_id, proposed_fare')
+    .in('parcel_delivery_id', deliveries.map((delivery) => delivery.id));
+  if (bidsError) throw bidsError;
+
+  const bidAmounts = new Map(
+    bids?.map((bid) => [bid.parcel_delivery_id, bid.proposed_fare]) ?? []
+  );
+
+  return deliveries.map((delivery) => ({
+    ...delivery,
+    driverBid: bidAmounts.get(delivery.id),
+  }));
+}
+
+export async function submitParcelBid(
+  deliveryId: string,
+  driverId: string,
+  proposedFare: number
+): Promise<void> {
+  const { error } = await getSupabaseClient()
+    .from('parcel_bids')
+    .insert({
+      parcel_delivery_id: deliveryId,
+      driver_id: driverId,
+      proposed_fare: proposedFare,
+    });
+
+  if (error) throw error;
+}
+
+export async function getParcelBids(deliveryId: string): Promise<ParcelBid[]> {
+  const { data, error } = await getSupabaseClient().rpc('get_parcel_bids', {
+    p_delivery_id: deliveryId,
+  });
+  if (error) throw error;
+
+  return (data ?? []).map((row: {
+    id: string;
+    driver_id: string;
+    driver_name: string;
+    bicycle_number: string | null;
+    proposed_fare: number;
+    status: string;
+    created_at: string;
+  }) => ({
+    id: row.id,
+    parcelDeliveryId: deliveryId,
+    driverId: row.driver_id,
+    driverName: row.driver_name,
+    bicycleNumber: row.bicycle_number,
+    proposedFare: row.proposed_fare,
+    status: row.status as ParcelBid['status'],
+    createdAt: row.created_at,
+  }));
+}
+
+export async function respondToParcelBid(bidId: string, accept: boolean): Promise<void> {
+  const { error } = await getSupabaseClient().rpc('respond_to_parcel_bid', {
+    p_bid_id: bidId,
+    p_accept: accept,
+  });
+  if (error) throw error;
+}
+
+function mapParcelDelivery(row: Record<string, unknown>): ParcelDelivery {
+  return {
+    id: row.id as string,
+    senderId: row.sender_id as string,
+    pickup: {
+      address: row.pickup_address as string,
+      lat: row.pickup_lat as number,
+      lng: row.pickup_lng as number,
+    },
+    destination: {
+      address: row.destination_address as string,
+      lat: row.destination_lat as number,
+      lng: row.destination_lng as number,
+    },
+    senderName: row.sender_name as string,
+    senderPhone: row.sender_phone as string,
+    recipientName: row.recipient_name as string,
+    recipientPhone: row.recipient_phone as string,
+    distanceKm: Number(row.distance_km),
+    durationMin: row.duration_min as number,
+    estimatedFare: row.estimated_fare as number,
+    senderOffer: row.sender_offer as number,
+    status: row.status as ParcelDelivery['status'],
+    createdAt: row.created_at as string,
+  };
 }
 
 function distanceBetweenMeters(

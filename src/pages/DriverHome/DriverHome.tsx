@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Bike, MapPin, Route, Search } from 'lucide-react';
+import { Bike, MapPin, Package, Route, Search } from 'lucide-react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { PageContainer } from '../../components/ui/PageContainer';
 import { Button } from '../../components/ui/Button';
@@ -7,12 +7,14 @@ import MapView from '../../components/map/MapView';
 import MapSettings from '../../components/map/MapSettings';
 import { useAuthStore } from '../../store/authStore';
 import {
+  getNearbyParcelDeliveries,
   getNearbyRideRequests,
   getRideServiceErrorMessage,
+  submitParcelBid,
   submitRideBid,
 } from '../../services/rideService';
 import { formatDistance, formatFare } from '../../utils/fareCalculator';
-import type { NearbyRideRequest } from '../../types';
+import type { NearbyParcelDelivery, NearbyRideRequest } from '../../types';
 
 export default function DriverHome() {
   const [isOnline, setIsOnline] = useState(false);
@@ -21,7 +23,9 @@ export default function DriverHome() {
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const driverLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const [rideRequests, setRideRequests] = useState<NearbyRideRequest[]>([]);
+  const [parcelDeliveries, setParcelDeliveries] = useState<NearbyParcelDelivery[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [selectedParcelId, setSelectedParcelId] = useState<string | null>(null);
   const [bidAmount, setBidAmount] = useState('');
   const [bidError, setBidError] = useState<string | null>(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
@@ -46,9 +50,13 @@ export default function DriverHome() {
       if (!location) return;
       setLoadingRequests(true);
       try {
-        const requests = await getNearbyRideRequests(location);
+        const [requests, parcels] = await Promise.all([
+          getNearbyRideRequests(location),
+          getNearbyParcelDeliveries(location),
+        ]);
         if (isMounted) {
           setRideRequests(requests);
+          setParcelDeliveries(parcels);
           setBidError(null);
         }
       } catch (err) {
@@ -98,7 +106,10 @@ export default function DriverHome() {
       return;
     }
     setIsOnline(newStatus);
-    if (!newStatus) setRideRequests([]);
+    if (!newStatus) {
+      setRideRequests([]);
+      setParcelDeliveries([]);
+    }
     setBidError(null);
 
     // Visual feedback: change map style when going online
@@ -138,6 +149,40 @@ export default function DriverHome() {
         `Your bid was submitted, but nearby requests could not refresh: ${getRideServiceErrorMessage(
           err,
           'Could not refresh nearby requests.'
+        )}`
+      );
+    } finally {
+      setSubmittingBid(false);
+    }
+  };
+
+  const handleSubmitParcelBid = async (delivery: NearbyParcelDelivery) => {
+    const proposedFare = Number(bidAmount);
+    const location = driverLocationRef.current;
+    if (!user || !location || !Number.isSafeInteger(proposedFare) || proposedFare <= 0) {
+      setBidError('Enter a valid bid greater than 0 RWF.');
+      return;
+    }
+
+    setSubmittingBid(true);
+    setBidError(null);
+    try {
+      await submitParcelBid(delivery.id, user.id, proposedFare);
+      setSelectedParcelId(null);
+      setBidAmount('');
+    } catch (err) {
+      setBidError(getRideServiceErrorMessage(err, 'Could not submit your parcel bid.'));
+      setSubmittingBid(false);
+      return;
+    }
+
+    try {
+      setParcelDeliveries(await getNearbyParcelDeliveries(location));
+    } catch (err) {
+      setBidError(
+        `Your bid was submitted, but parcel requests could not refresh: ${getRideServiceErrorMessage(
+          err,
+          'Could not refresh parcel requests.'
         )}`
       );
     } finally {
@@ -199,9 +244,9 @@ export default function DriverHome() {
             
             {bidError && <p role="alert" className="text-sm text-red text-center">{bidError}</p>}
 
-            {loadingRequests && rideRequests.length === 0 ? (
+            {loadingRequests && rideRequests.length === 0 && parcelDeliveries.length === 0 ? (
               <p className="py-5 text-center text-sm text-gray-500">Searching nearby requests…</p>
-            ) : rideRequests.length === 0 ? (
+            ) : rideRequests.length === 0 && parcelDeliveries.length === 0 ? (
               <div className="w-full bg-gray-50 rounded-2xl p-6 flex flex-col items-center gap-3 border border-gray-100">
                 <Search aria-hidden="true" className="h-10 w-10 text-gray-400" strokeWidth={1.5} />
                 <p className="text-gray-600 font-medium text-sm text-center">
@@ -209,8 +254,10 @@ export default function DriverHome() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {rideRequests.map((request) => {
+              <>
+                {rideRequests.length > 0 && (
+                  <div className="space-y-3">
+                    {rideRequests.map((request) => {
                   const isSelected = selectedRequestId === request.id;
                   return (
                     <div key={request.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -277,6 +324,7 @@ export default function DriverHome() {
                             className="mt-3"
                             onClick={() => {
                               setSelectedRequestId(request.id);
+                              setSelectedParcelId(null);
                               setBidAmount('');
                               setBidError(null);
                             }}
@@ -288,8 +336,96 @@ export default function DriverHome() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                    })}
+                  </div>
+                )}
+                {parcelDeliveries.length > 0 && (
+                  <div className="space-y-3">
+                    <h2 className="pt-2 text-base font-bold text-black">Parcel deliveries</h2>
+                    {parcelDeliveries.map((delivery) => {
+                      const isSelected = selectedParcelId === delivery.id;
+                      return (
+                        <div key={delivery.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-gray-600">
+                              <MapPin aria-hidden="true" className="h-3.5 w-3.5" />
+                              {formatDistance(delivery.pickupDistanceMeters / 1000)} away
+                            </span>
+                            <span className="text-base font-extrabold tracking-tight text-sunset">
+                              Offer {formatFare(delivery.senderOffer)}
+                            </span>
+                          </div>
+                          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">Parcel</p>
+                          <div className="space-y-2 text-sm">
+                            <p className="flex items-start gap-2 text-gray-700">
+                              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-gray-500" />
+                              <span className="truncate">{delivery.pickup.address}</span>
+                            </p>
+                            <p className="flex items-start gap-2 text-gray-700">
+                              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sunset" />
+                              <span className="truncate">{delivery.destination.address}</span>
+                            </p>
+                            {delivery.driverBid !== undefined ? (
+                              <p className="mt-3 rounded-lg bg-sunset/5 px-3 py-2 text-sm font-semibold text-sunset">
+                                Your bid: {formatFare(delivery.driverBid)}
+                              </p>
+                            ) : isSelected ? (
+                              <div className="mt-3 space-y-2">
+                                <label className="block text-sm font-bold text-gray-700">
+                                  Your bid · RWF
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    inputMode="numeric"
+                                    value={bidAmount}
+                                    onChange={(event) => setBidAmount(event.target.value)}
+                                    placeholder="Amount"
+                                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-lg font-semibold text-black outline-none transition focus:border-sunset focus:ring-2 focus:ring-sunset/20"
+                                  />
+                                </label>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setSelectedParcelId(null);
+                                      setBidAmount('');
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    fullWidth
+                                    disabled={!Number.isSafeInteger(Number(bidAmount)) || Number(bidAmount) <= 0}
+                                    loading={submittingBid}
+                                    onClick={() => void handleSubmitParcelBid(delivery)}
+                                  >
+                                    Submit bid
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <Button
+                                fullWidth
+                                className="mt-3"
+                                onClick={() => {
+                                  setSelectedParcelId(delivery.id);
+                                  setSelectedRequestId(null);
+                                  setBidAmount('');
+                                  setBidError(null);
+                                }}
+                              >
+                                <Package aria-hidden="true" className="mr-2 h-4 w-4" />
+                                Bid on delivery
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         ) : (

@@ -160,7 +160,7 @@ export default function MapView({
 
     if (!pickupMarkerRef.current) {
       const el = document.createElement('div');
-      el.innerHTML = `<div style="position:relative;"><div style="width:16px;height:16px;background:#10b981;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div><div class="pickup-pulse" style="position:absolute;top:-4px;left:-4px;width:24px;height:24px;background:rgba(16,185,129,0.3);border-radius:50%;"></div></div>`;
+      el.innerHTML = `<div style="position:relative;"><div style="width:16px;height:16px;background:#F97316;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div><div class="pickup-pulse" style="position:absolute;top:-4px;left:-4px;width:24px;height:24px;background:rgba(249,115,22,0.3);border-radius:50%;"></div></div>`;
       pickupMarkerRef.current = new mapboxgl.Marker({ element: el });
     }
     pickupMarkerRef.current

@@ -7,6 +7,7 @@ import OTPScreen from './pages/Auth/OTPScreen';
 import RoleScreen from './pages/Auth/RoleScreen';
 import ProfileScreen from './pages/Auth/ProfileScreen';
 import PassengerHome from './pages/PassengerHome/PassengerHome';
+import ParcelDeliveryScreen from './pages/PassengerHome/ParcelDeliveryScreen';
 import DriverHome from './pages/DriverHome/DriverHome';
 
 function AppRoutes() {
@@ -44,6 +45,9 @@ function AppRoutes() {
           user?.role === 'driver' ? <DriverHome /> : <PassengerHome />
         }
       />
+      {user?.role === 'passenger' && (
+        <Route path="/parcels/new" element={<ParcelDeliveryScreen />} />
+      )}
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   );

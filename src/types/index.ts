@@ -69,6 +69,48 @@ export interface RideBid {
   createdAt: string;
 }
 
+export interface ParcelDelivery {
+  id: string;
+  senderId: string;
+  pickup: {
+    address: string;
+    lat: number;
+    lng: number;
+  };
+  destination: {
+    address: string;
+    lat: number;
+    lng: number;
+  };
+  senderName: string;
+  senderPhone: string;
+  recipientName: string;
+  recipientPhone: string;
+  distanceKm: number;
+  durationMin: number;
+  estimatedFare: number;
+  senderOffer: number;
+  status: RideRequest['status'];
+  createdAt: string;
+}
+
+export interface NearbyParcelDelivery
+  extends Omit<ParcelDelivery, 'senderName' | 'senderPhone' | 'recipientName' | 'recipientPhone'> {
+  pickupDistanceMeters: number;
+  driverBid?: number;
+}
+
+export interface ParcelBid {
+  id: string;
+  parcelDeliveryId: string;
+  driverId: string;
+  driverName: string;
+  bicycleNumber: string | null;
+  proposedFare: number;
+  status: RideBid['status'];
+  createdAt: string;
+}
+
 export interface Bid {
   id: string;
   rideRequestId: string;

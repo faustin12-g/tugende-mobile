@@ -45,6 +45,12 @@ to already exist. If ride requests return a 404, this migration has not been
 applied successfully or the Supabase API schema cache needs a moment to reload.
 Refresh the app after the migration completes. Restart Vite after changing `.env`.
 
+After running the profile and ride setup scripts, run
+[`supabase/parcel-delivery-migration.sql`](./supabase/parcel-delivery-migration.sql)
+for both new and existing projects to enable parcel deliveries and driver bids.
+Parcel pickup and recipient contact details are only readable by the sender;
+nearby drivers receive pickup/drop-off details and the sender's offer.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

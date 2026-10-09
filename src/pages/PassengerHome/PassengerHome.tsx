@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   Bike,
   Clock,
@@ -29,6 +30,7 @@ import type { PlaceSelection } from '../../services/googlePlaces';
 import type { RideBid } from '../../types';
 
 export default function PassengerHome() {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const {
     pickup,
@@ -295,7 +297,12 @@ export default function PassengerHome() {
               onSelect={handleDestinationSelect}
             />
 
-            <Button variant="outline" fullWidth className="py-4">
+            <Button
+              variant="outline"
+              fullWidth
+              className="py-4"
+              onClick={() => navigate('/parcels/new')}
+            >
               <Package aria-hidden="true" className="mr-2 h-5 w-5" />
               Send Parcel
             </Button>
