@@ -324,7 +324,11 @@ export default function DriverHome() {
       <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-10">
         <div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg">
           <h1 className="text-lg font-bold text-black tracking-tight">
-            <Bike aria-hidden="true" className="mr-1 inline h-5 w-5 align-text-bottom" />
+            <img
+              src="/icons/tugende-192.png"
+              alt=""
+              className="mr-1 inline h-6 w-6 rounded-md object-cover align-text-bottom"
+            />
             {user?.name || 'Driver'}
           </h1>
         </div>

@@ -49,6 +49,11 @@ export default function WelcomeScreen() {
   return (
     <PageContainer className="justify-between items-center text-center pt-16">
       <div className="flex-1 flex flex-col justify-center items-center w-full">
+        <img
+          src="/icons/tugende-192.png"
+          alt="Tugende"
+          className="mb-8 h-20 w-20 rounded-2xl object-cover shadow-sm"
+        />
         <AnimatePresence mode="wait">
           <motion.div
             key={currentSlide}

@@ -16,6 +16,11 @@ export default function AuthChoiceScreen() {
   return (
     <PageContainer className="justify-between">
       <div className="mt-8">
+        <img
+          src="/icons/tugende-192.png"
+          alt="Tugende"
+          className="mb-6 h-20 w-20 rounded-2xl object-cover"
+        />
         <h1 className="text-3xl font-extrabold tracking-tight text-black">Welcome to Tugende</h1>
         <p className="mt-2 text-base text-gray-600">Choose how to continue</p>
       </div>

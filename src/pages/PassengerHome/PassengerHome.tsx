@@ -315,7 +315,10 @@ export default function PassengerHome() {
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 p-4 pt-12 flex justify-between items-center z-10">
         <div className="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-2 shadow-lg">
-          <h1 className="text-xl font-bold text-black tracking-tight">Tugende</h1>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-black tracking-tight">
+            <img src="/icons/tugende-192.png" alt="" className="h-8 w-8 rounded-lg object-cover" />
+            Tugende
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-2xl bg-white/90 px-3 py-1.5 shadow-lg backdrop-blur-md">
