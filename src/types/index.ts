@@ -111,6 +111,23 @@ export interface ParcelBid {
   createdAt: string;
 }
 
+export type TrackableType = 'ride' | 'parcel';
+
+export interface TripTracking {
+  type: TrackableType;
+  id: string;
+  status: RideRequest['status'];
+  pickup: { address: string; lat: number; lng: number };
+  destination: { address: string; lat: number; lng: number };
+  driverLocation: { lat: number; lng: number; heading: number | null } | null;
+  updatedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface DriverActiveTrip extends TripTracking {
+  agreedFare: number;
+}
+
 export interface Bid {
   id: string;
   rideRequestId: string;

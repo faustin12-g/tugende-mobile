@@ -4,10 +4,13 @@ import { getSupabaseClient } from './supabase';
 import type {
   NearbyParcelDelivery,
   NearbyRideRequest,
+  DriverActiveTrip,
   ParcelBid,
   ParcelDelivery,
   RideBid,
   RideRequest,
+  TrackableType,
+  TripTracking,
 } from '../types';
 
 interface CreateRideParams {
@@ -41,6 +44,9 @@ export function getRideServiceErrorMessage(error: unknown, fallback: string): st
     serviceError.status === 404 ||
     /could not find the (table|column|function)|relation .* does not exist/i.test(message)
   ) {
+    if (/trip_tracking|set_trip_status|tracking/i.test(message)) {
+      return 'Live tracking setup is missing. Run supabase/trip-tracking-migration.sql in the Supabase SQL Editor, then refresh the app.';
+    }
     const migration = /parcel/i.test(message)
       ? 'supabase/parcel-delivery-migration.sql'
       : 'supabase/ride-offer-migration.sql';
@@ -48,6 +54,186 @@ export function getRideServiceErrorMessage(error: unknown, fallback: string): st
   }
 
   return [message, details, hint].filter(Boolean).join(' — ') || fallback;
+}
+
+interface TrackingRow {
+  trip_type: TrackableType;
+  trip_id: string;
+  status: RideRequest['status'];
+  pickup_address: string;
+  pickup_lat: number;
+  pickup_lng: number;
+  destination_address: string;
+  destination_lat: number;
+  destination_lng: number;
+  driver_latitude: number | null;
+  driver_longitude: number | null;
+  driver_heading: number | null;
+  location_updated_at: string | null;
+  expires_at?: string | null;
+}
+
+function mapTrackingRow(row: TrackingRow): TripTracking {
+  return {
+    type: row.trip_type,
+    id: row.trip_id,
+    status: row.status,
+    pickup: { address: row.pickup_address, lat: row.pickup_lat, lng: row.pickup_lng },
+    destination: {
+      address: row.destination_address,
+      lat: row.destination_lat,
+      lng: row.destination_lng,
+    },
+    driverLocation:
+      row.driver_latitude === null || row.driver_longitude === null
+        ? null
+        : {
+            lat: row.driver_latitude,
+            lng: row.driver_longitude,
+            heading: row.driver_heading,
+          },
+    updatedAt: row.location_updated_at,
+    expiresAt: row.expires_at ?? null,
+  };
+}
+
+export async function getTripTracking(type: TrackableType, tripId: string): Promise<TripTracking> {
+  const { data, error } = await getSupabaseClient().rpc('get_trip_tracking', {
+    p_type: type,
+    p_trip_id: tripId,
+  });
+  if (error) throw error;
+  const row = (data as TrackingRow[] | null)?.[0];
+  if (!row) throw new Error('Trip tracking is not available for this account.');
+  return mapTrackingRow(row);
+}
+
+export async function getPublicTripTracking(token: string): Promise<TripTracking | null> {
+  const { data, error } = await getSupabaseClient().rpc('get_public_trip_tracking', {
+    p_token: token,
+  });
+  if (error) throw error;
+  const row = (data as TrackingRow[] | null)?.[0];
+  return row ? mapTrackingRow(row) : null;
+}
+
+export async function createTripTrackingShare(
+  type: TrackableType,
+  tripId: string
+): Promise<{ id: string; url: string }> {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const token = btoa(String.fromCharCode(...bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+  const { data, error } = await getSupabaseClient().rpc('create_trip_tracking_share', {
+    p_type: type,
+    p_trip_id: tripId,
+    p_token: token,
+  });
+  if (error) throw error;
+  if (typeof data !== 'string') throw new Error('Could not create a tracking link.');
+  const publicAppUrl = import.meta.env.VITE_PUBLIC_APP_URL?.trim() || window.location.origin;
+  return { id: data, url: new URL(`/track/${token}`, publicAppUrl).toString() };
+}
+
+export async function revokeTripTrackingShare(shareId: string): Promise<void> {
+  const { error } = await getSupabaseClient().rpc('revoke_trip_tracking_share', {
+    p_share_id: shareId,
+  });
+  if (error) throw error;
+}
+
+export async function setTripStatus(
+  type: TrackableType,
+  tripId: string,
+  status: 'in_progress' | 'completed'
+): Promise<void> {
+  const { error } = await getSupabaseClient().rpc('set_trip_status', {
+    p_type: type,
+    p_trip_id: tripId,
+    p_status: status,
+  });
+  if (error) throw error;
+}
+
+export async function publishTripLocation(
+  type: TrackableType,
+  tripId: string,
+  location: { lat: number; lng: number; heading: number | null }
+): Promise<void> {
+  const { error } = await getSupabaseClient().rpc('publish_trip_location', {
+    p_type: type,
+    p_trip_id: tripId,
+    p_latitude: location.lat,
+    p_longitude: location.lng,
+    p_heading: location.heading,
+  });
+  if (error) throw error;
+}
+
+export async function getDriverActiveTrips(): Promise<DriverActiveTrip[]> {
+  const supabase = getSupabaseClient();
+  const [rides, parcels] = await Promise.all([
+    supabase.rpc('get_driver_active_rides'),
+    supabase.rpc('get_driver_active_parcels'),
+  ]);
+  if (rides.error) throw rides.error;
+  if (parcels.error) throw parcels.error;
+
+  const rideTrips = (rides.data ?? []).map((row: {
+    id: string;
+    pickup_address: string;
+    pickup_lat: number;
+    pickup_lng: number;
+    destination_address: string;
+    destination_lat: number;
+    destination_lng: number;
+    passenger_offer: number;
+    status: string;
+    agreed_fare: number | null;
+  }) => ({
+    type: 'ride' as const,
+    id: row.id,
+    status: row.status as RideRequest['status'],
+    pickup: { address: row.pickup_address, lat: row.pickup_lat, lng: row.pickup_lng },
+    destination: {
+      address: row.destination_address,
+      lat: row.destination_lat,
+      lng: row.destination_lng,
+    },
+    driverLocation: null,
+    updatedAt: null,
+    expiresAt: null,
+    agreedFare: row.agreed_fare ?? row.passenger_offer,
+  }));
+  const parcelTrips = (parcels.data ?? []).map((row: {
+    id: string;
+    pickup_address: string;
+    pickup_lat: number;
+    pickup_lng: number;
+    destination_address: string;
+    destination_lat: number;
+    destination_lng: number;
+    sender_offer: number;
+    status: string;
+    agreed_fare: number | null;
+  }) => ({
+    type: 'parcel' as const,
+    id: row.id,
+    status: row.status as RideRequest['status'],
+    pickup: { address: row.pickup_address, lat: row.pickup_lat, lng: row.pickup_lng },
+    destination: {
+      address: row.destination_address,
+      lat: row.destination_lat,
+      lng: row.destination_lng,
+    },
+    driverLocation: null,
+    updatedAt: null,
+    expiresAt: null,
+    agreedFare: row.agreed_fare ?? row.sender_offer,
+  }));
+  return [...rideTrips, ...parcelTrips];
 }
 
 export async function createRideRequest(

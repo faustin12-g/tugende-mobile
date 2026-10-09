@@ -51,6 +51,16 @@ for both new and existing projects to enable parcel deliveries and driver bids.
 Parcel pickup and recipient contact details are only readable by the sender;
 nearby drivers receive pickup/drop-off details and the sender's offer.
 
+After the ride and parcel migrations, run
+[`supabase/trip-tracking-migration.sql`](./supabase/trip-tracking-migration.sql).
+This enables assigned-driver trip controls, latest-location-only updates, and
+revocable public tracking links. Drivers must allow device location when
+starting a trip. Public links show only the route, trip status, and current
+driver location; they expire 24 hours after completion. Share links from a
+deployed public app URL for viewers outside the driver's local network. Set
+`VITE_PUBLIC_APP_URL` to that web app URL when building the native app; web
+builds otherwise use the current site origin.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bike, Clock, Loader2, MapPin, Package, Route, X } from 'lucide-react';
+import { ArrowLeft, Bike, Clock, Loader2, MapPin, Package, Route, Share2, X } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import DestinationSearch from '../../components/map/DestinationSearch';
@@ -13,15 +13,18 @@ import {
   createParcelDelivery,
   getParcelBids,
   getRideServiceErrorMessage,
+  getTripTracking,
+  createTripTrackingShare,
+  revokeTripTrackingShare,
   respondToParcelBid,
 } from '../../services/rideService';
 import { fetchCyclingRoute, type RouteInfo } from '../../services/directions';
 import { calculateFare, formatDistance, formatDuration, formatFare } from '../../utils/fareCalculator';
-import type { ParcelBid } from '../../types';
+import type { ParcelBid, TripTracking } from '../../types';
 import type { PlaceSelection } from '../../services/googlePlaces';
 
 type PickupMode = 'current' | 'custom';
-type ParcelStep = 'details' | 'offer' | 'requesting' | 'waiting' | 'accepted';
+type ParcelStep = 'details' | 'offer' | 'requesting' | 'waiting' | 'accepted' | 'in_progress' | 'completed';
 type Pickup = { address: string; lat: number; lng: number };
 
 export default function ParcelDeliveryScreen() {
@@ -44,6 +47,10 @@ export default function ParcelDeliveryScreen() {
   const [respondingBid, setRespondingBid] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tracking, setTracking] = useState<TripTracking | null>(null);
+  const [shareInfo, setShareInfo] = useState<{ id: string; url: string } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   const pickup: Pickup | null =
     pickupMode === 'current'
@@ -154,6 +161,48 @@ export default function ParcelDeliveryScreen() {
     }
   };
 
+  const handleShareTrip = async () => {
+    if (!deliveryId) return;
+    setSharing(true);
+    setShareMessage(null);
+    try {
+      let share = shareInfo;
+      if (!share) {
+        const created = await createTripTrackingShare('parcel', deliveryId);
+        share = {
+          id: created.id,
+          url: created.url,
+        };
+        setShareInfo(share);
+      }
+      if (navigator.share) {
+        await navigator.share({ title: 'Track my Tugende delivery', url: share.url });
+      } else {
+        await navigator.clipboard.writeText(share.url);
+        setShareMessage('Tracking link copied');
+      }
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
+      setError(getRideServiceErrorMessage(shareError, 'Could not create a tracking link.'));
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleRevokeShare = async () => {
+    if (!shareInfo) return;
+    setSharing(true);
+    try {
+      await revokeTripTrackingShare(shareInfo.id);
+      setShareInfo(null);
+      setShareMessage('Link stopped');
+    } catch (shareError) {
+      setError(getRideServiceErrorMessage(shareError, 'Could not stop sharing.'));
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const handleCancel = async () => {
     if (deliveryId) {
       setLoading(true);
@@ -192,6 +241,29 @@ export default function ParcelDeliveryScreen() {
     };
   }, [deliveryId, step]);
 
+  useEffect(() => {
+    if (!deliveryId || !['accepted', 'in_progress'].includes(step)) return;
+    let active = true;
+    const refreshTracking = async () => {
+      try {
+        const current = await getTripTracking('parcel', deliveryId);
+        if (!active) return;
+        setTracking(current);
+        if (current.status === 'in_progress' || current.status === 'completed') {
+          setStep(current.status);
+        }
+      } catch (trackingError) {
+        if (active) setError(getRideServiceErrorMessage(trackingError, 'Could not load live delivery status.'));
+      }
+    };
+    void refreshTracking();
+    const interval = window.setInterval(() => void refreshTracking(), 5000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [deliveryId, step]);
+
   const detailsValid =
     Boolean(pickup && destination) &&
     senderName.trim().length > 0 &&
@@ -210,6 +282,9 @@ export default function ParcelDeliveryScreen() {
           pickupLocation={pickup}
           routeGeometry={route?.geometry ?? null}
           searching={step === 'requesting' || step === 'waiting'}
+          bikeLocation={tracking?.driverLocation}
+          bikeHeading={tracking?.driverLocation?.heading}
+          followBikeLocation
         />
       </div>
 
@@ -425,7 +500,7 @@ export default function ParcelDeliveryScreen() {
           </div>
         )}
 
-        {(step === 'waiting' || step === 'accepted') && (
+        {(step === 'waiting' || step === 'accepted' || step === 'in_progress' || step === 'completed') && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sunset/10">
@@ -433,9 +508,9 @@ export default function ParcelDeliveryScreen() {
               </div>
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-black">
-                  {step === 'accepted' ? 'Delivery confirmed' : 'Finding a rider…'}
+                  {step === 'waiting' ? 'Finding a rider…' : step === 'in_progress' ? 'Delivery in progress' : step === 'completed' ? 'Delivery complete' : 'Delivery confirmed'}
                 </h2>
-                {step === 'accepted' && acceptedBid && (
+                {step !== 'waiting' && acceptedBid && (
                   <p className="text-sm font-semibold text-sunset">
                     {acceptedBid.driverName} · {formatFare(acceptedBid.proposedFare)}
                   </p>
@@ -500,7 +575,28 @@ export default function ParcelDeliveryScreen() {
                 Cancel delivery
               </Button>
             )}
-            {step === 'accepted' && (
+            {step !== 'waiting' && (
+              <div className="space-y-2">
+                {step !== 'completed' && (
+                  <>
+                    <p className="text-sm font-medium text-gray-600">
+                      {tracking?.driverLocation ? 'Driver is on the way' : 'Waiting for driver to start'}
+                    </p>
+                    <Button fullWidth loading={sharing} onClick={() => void handleShareTrip()}>
+                      <Share2 aria-hidden="true" className="mr-2 h-4 w-4" />
+                      Share delivery
+                    </Button>
+                  </>
+                )}
+                {shareInfo && (
+                  <Button variant="outline" disabled={sharing} onClick={() => void handleRevokeShare()}>
+                    Stop sharing
+                  </Button>
+                )}
+                {shareMessage && <p className="text-sm text-gray-600">{shareMessage}</p>}
+              </div>
+            )}
+            {step === 'completed' && (
               <Button fullWidth onClick={() => navigate('/home')}>Done</Button>
             )}
           </div>

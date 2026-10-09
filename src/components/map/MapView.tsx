@@ -33,6 +33,10 @@ export interface MapViewProps {
   routeGeometry?: GeoJSON.LineString | null;
   /** Location of the bicycle/driver on the map */
   bikeLocation?: { lat: number; lng: number } | null;
+  /** Heading in degrees clockwise from north for the driver marker */
+  bikeHeading?: number | null;
+  /** Keep the map camera centered on the live driver marker */
+  followBikeLocation?: boolean;
   /** Whether to show expanding radar waves at pickup (searching for drivers) */
   searching?: boolean;
   className?: string;
@@ -49,6 +53,8 @@ export default function MapView({
   pickupLocation = null,
   routeGeometry = null,
   bikeLocation = null,
+  bikeHeading = null,
+  followBikeLocation = false,
   searching = false,
   className = '',
 }: MapViewProps) {
@@ -186,8 +192,15 @@ export default function MapView({
     }
     bikeMarkerRef.current
       .setLngLat([bikeLocation.lng, bikeLocation.lat])
+      .setRotation(bikeHeading ?? 0)
       .addTo(map);
-  }, [bikeLocation]);
+  }, [bikeLocation, bikeHeading]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !bikeLocation || !followBikeLocation) return;
+    map.easeTo({ center: [bikeLocation.lng, bikeLocation.lat], duration: 700 });
+  }, [bikeLocation, followBikeLocation]);
 
   // ── Geographic radar waves (searching for drivers) ──
   useEffect(() => {

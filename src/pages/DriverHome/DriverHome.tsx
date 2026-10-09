@@ -9,19 +9,58 @@ import { useAuthStore } from '../../store/authStore';
 import {
   getNearbyParcelDeliveries,
   getNearbyRideRequests,
+  getDriverActiveTrips,
   getRideServiceErrorMessage,
+  publishTripLocation,
+  setTripStatus,
   submitParcelBid,
   submitRideBid,
 } from '../../services/rideService';
 import { formatDistance, formatFare } from '../../utils/fareCalculator';
-import type { NearbyParcelDelivery, NearbyRideRequest } from '../../types';
+import type { DriverActiveTrip, NearbyParcelDelivery, NearbyRideRequest } from '../../types';
+
+function getDevicePosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    let watchId: number | null = null;
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      finish(() => reject(
+        new Error(
+          'Location permission is enabled, but your device has not provided a location fix. Turn on Location Services/GPS and try again.'
+        )
+      ));
+    }, 45_000);
+
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      callback();
+    };
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => finish(() => resolve(position)),
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          finish(() => reject(new Error('Location permission is blocked. Allow location access in your browser settings.')));
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 30_000, timeout: 30_000 }
+    );
+  });
+}
 
 export default function DriverHome() {
   const [isOnline, setIsOnline] = useState(false);
   const { user } = useAuthStore();
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
-  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const driverLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [driverLocation, setDriverLocation] = useState<{
+    lat: number;
+    lng: number;
+    heading?: number | null;
+  } | null>(null);
+  const driverLocationRef = useRef<{ lat: number; lng: number; heading?: number | null } | null>(null);
   const [rideRequests, setRideRequests] = useState<NearbyRideRequest[]>([]);
   const [parcelDeliveries, setParcelDeliveries] = useState<NearbyParcelDelivery[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
@@ -31,15 +70,79 @@ export default function DriverHome() {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [submittingBid, setSubmittingBid] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [activeTrips, setActiveTrips] = useState<DriverActiveTrip[]>([]);
+  const [trackingActionId, setTrackingActionId] = useState<string | null>(null);
+  const lastPublishedAt = useRef<number | null>(null);
 
   const handleMapReady = useCallback((map: MapboxMap) => {
     setMapInstance(map);
   }, []);
 
-  const handleLocationFound = useCallback((location: { lat: number; lng: number }) => {
+  const handleLocationFound = useCallback((location: { lat: number; lng: number; heading?: number | null }) => {
     driverLocationRef.current = location;
     setDriverLocation(location);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let isMounted = true;
+    const refreshActiveTrips = async () => {
+      try {
+        const trips = await getDriverActiveTrips();
+        if (isMounted) {
+          setActiveTrips((current) => {
+            const unchanged =
+              current.length === trips.length &&
+              current.every((trip, index) =>
+                trip.id === trips[index]?.id &&
+                trip.type === trips[index]?.type &&
+                trip.status === trips[index]?.status &&
+                trip.agreedFare === trips[index]?.agreedFare
+              );
+            return unchanged ? current : trips;
+          });
+        }
+      } catch (err) {
+        if (isMounted) {
+          setBidError(getRideServiceErrorMessage(err, 'Could not load your accepted trips.'));
+        }
+      }
+    };
+
+    void refreshActiveTrips();
+    const interval = window.setInterval(() => void refreshActiveTrips(), 5000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    const tripsInProgress = activeTrips.filter((trip) => trip.status === 'in_progress');
+    if (!tripsInProgress.length || !navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          heading: position.coords.heading,
+        };
+        const now = Date.now();
+        if (lastPublishedAt.current !== null && now - lastPublishedAt.current < 5000) return;
+        lastPublishedAt.current = now;
+        handleLocationFound(location);
+        void Promise.all(
+          tripsInProgress.map((trip) => publishTripLocation(trip.type, trip.id, location))
+        ).catch((err: unknown) => {
+          setBidError(getRideServiceErrorMessage(err, 'Could not update live location.'));
+        });
+      },
+      (error) => setBidError(`Live location stopped: ${error.message}`),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [activeTrips, handleLocationFound]);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -85,24 +188,21 @@ export default function DriverHome() {
       }
 
       setGettingLocation(true);
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
+      void getDevicePosition()
+        .then((position) => {
           const location = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           };
           handleLocationFound(location);
-          setGettingLocation(false);
           setIsOnline(true);
           setBidError(null);
           mapInstance?.easeTo({ zoom: 15, duration: 500 });
-        },
-        (error) => {
-          setGettingLocation(false);
-          setBidError(`Could not get your location: ${error.message}`);
-        },
-        { enableHighAccuracy: true, timeout: 12000 }
-      );
+        })
+        .catch((error: unknown) => {
+          setBidError(getRideServiceErrorMessage(error, 'Could not get your location.'));
+        })
+        .finally(() => setGettingLocation(false));
       return;
     }
     setIsOnline(newStatus);
@@ -118,6 +218,34 @@ export default function DriverHome() {
         zoom: newStatus ? 15 : 14,
         duration: 500,
       });
+    }
+  };
+
+  const handleTripAction = async (trip: DriverActiveTrip) => {
+    setTrackingActionId(trip.id);
+    setBidError(null);
+    try {
+      if (trip.status === 'accepted') {
+        if (!navigator.geolocation) {
+          throw new Error('This device does not support location sharing.');
+        }
+        const position = await getDevicePosition();
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          heading: position.coords.heading,
+        };
+        handleLocationFound(location);
+        await setTripStatus(trip.type, trip.id, 'in_progress');
+        await publishTripLocation(trip.type, trip.id, location);
+      } else {
+        await setTripStatus(trip.type, trip.id, 'completed');
+      }
+      setActiveTrips(await getDriverActiveTrips());
+    } catch (err) {
+      setBidError(getRideServiceErrorMessage(err, 'Could not update this trip.'));
+    } finally {
+      setTrackingActionId(null);
     }
   };
 
@@ -225,6 +353,8 @@ export default function DriverHome() {
       <div className="absolute inset-0">
         <MapView
           showUserLocation
+          bikeLocation={driverLocation}
+          bikeHeading={driverLocation?.heading}
           onMapReady={handleMapReady}
           onLocationFound={handleLocationFound}
         />
@@ -233,6 +363,33 @@ export default function DriverHome() {
       {/* Bottom Section — floats over the map */}
       <div className="absolute bottom-0 left-0 right-0 max-h-[55vh] overflow-y-auto bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] p-6 pb-10 z-10">
         <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto -mt-2 mb-4 sticky top-0" />
+
+        {activeTrips.length > 0 && (
+          <div className="mb-4 space-y-3">
+            <h2 className="text-base font-bold text-black">Your accepted trips</h2>
+            {activeTrips.map((trip) => (
+              <div key={`${trip.type}-${trip.id}`} className="rounded-2xl border border-sunset/20 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="font-bold text-black">
+                    {trip.type === 'ride' ? 'Passenger ride' : 'Parcel delivery'}
+                  </span>
+                  <span className="text-sm font-extrabold text-sunset">{formatFare(trip.agreedFare)}</span>
+                </div>
+                <p className="truncate text-sm text-gray-700">{trip.pickup.address}</p>
+                <p className="my-1 text-xs font-semibold uppercase text-gray-400">to</p>
+                <p className="truncate text-sm text-gray-700">{trip.destination.address}</p>
+                <Button
+                  fullWidth
+                  className="mt-3"
+                  loading={trackingActionId === trip.id}
+                  onClick={() => void handleTripAction(trip)}
+                >
+                  {trip.status === 'accepted' ? 'Start trip' : 'Complete trip'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {isOnline ? (
           <div className="flex flex-col gap-3">

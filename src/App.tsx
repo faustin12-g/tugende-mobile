@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import WelcomeScreen from './pages/Welcome/WelcomeScreen';
 import AuthChoiceScreen from './pages/Auth/AuthChoiceScreen';
@@ -9,9 +9,20 @@ import ProfileScreen from './pages/Auth/ProfileScreen';
 import PassengerHome from './pages/PassengerHome/PassengerHome';
 import ParcelDeliveryScreen from './pages/PassengerHome/ParcelDeliveryScreen';
 import DriverHome from './pages/DriverHome/DriverHome';
+import PublicTrackingScreen from './pages/Tracking/PublicTrackingScreen';
 
 function AppRoutes() {
   const { isAuthenticated, hasSeenOnboarding, user } = useAuthStore();
+  const location = useLocation();
+
+  if (location.pathname.startsWith('/track/')) {
+    return (
+      <Routes>
+        <Route path="/track/:token" element={<PublicTrackingScreen />} />
+        <Route path="*" element={<Navigate to="/auth" replace />} />
+      </Routes>
+    );
+  }
 
   // Not seen onboarding yet → show welcome slides
   if (!hasSeenOnboarding) {

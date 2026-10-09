@@ -8,6 +8,7 @@ import {
   Navigation,
   Package,
   Route,
+  Share2,
   X,
 } from 'lucide-react';
 import { PageContainer } from '../../components/ui/PageContainer';
@@ -23,11 +24,15 @@ import {
   createRideRequest,
   getRideServiceErrorMessage,
   getRideBids,
+  getTripTracking,
+  createTripTrackingShare,
+  revokeTripTrackingShare,
   respondToRideBid,
 } from '../../services/rideService';
 import { calculateFare, formatFare, formatDistance, formatDuration } from '../../utils/fareCalculator';
 import type { PlaceSelection } from '../../services/googlePlaces';
 import type { RideBid } from '../../types';
+import type { TripTracking } from '../../types';
 
 export default function PassengerHome() {
   const navigate = useNavigate();
@@ -56,6 +61,10 @@ export default function PassengerHome() {
   const [rideBids, setRideBids] = useState<RideBid[]>([]);
   const [acceptedBid, setAcceptedBid] = useState<RideBid | null>(null);
   const [respondingBidId, setRespondingBidId] = useState<string | null>(null);
+  const [tracking, setTracking] = useState<TripTracking | null>(null);
+  const [shareInfo, setShareInfo] = useState<{ id: string; url: string } | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
   const waitingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-set pickup to user's GPS location
@@ -167,6 +176,48 @@ export default function PassengerHome() {
     }
   }, [setError, setStatus]);
 
+  const handleShareTrip = useCallback(async () => {
+    if (!activeRequest) return;
+    setSharing(true);
+    setShareMessage(null);
+    try {
+      let share = shareInfo;
+      if (!share) {
+        const created = await createTripTrackingShare('ride', activeRequest.id);
+        share = {
+          id: created.id,
+          url: created.url,
+        };
+        setShareInfo(share);
+      }
+      if (navigator.share) {
+        await navigator.share({ title: 'Track my Tugende ride', url: share.url });
+      } else {
+        await navigator.clipboard.writeText(share.url);
+        setShareMessage('Tracking link copied');
+      }
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
+      setError(getRideServiceErrorMessage(shareError, 'Could not create a tracking link.'));
+    } finally {
+      setSharing(false);
+    }
+  }, [activeRequest, shareInfo, setError]);
+
+  const handleRevokeShare = useCallback(async () => {
+    if (!shareInfo) return;
+    setSharing(true);
+    try {
+      await revokeTripTrackingShare(shareInfo.id);
+      setShareInfo(null);
+      setShareMessage('Link stopped');
+    } catch (shareError) {
+      setError(getRideServiceErrorMessage(shareError, 'Could not stop sharing.'));
+    } finally {
+      setSharing(false);
+    }
+  }, [shareInfo, setError]);
+
   const handleBeginRequest = useCallback(() => {
     setOfferAmount('');
     setError(null);
@@ -230,6 +281,29 @@ export default function PassengerHome() {
     };
   }, [activeRequest, setError, status]);
 
+  useEffect(() => {
+    if (!activeRequest || !['accepted', 'in_progress'].includes(status)) return;
+    let active = true;
+    const refreshTracking = async () => {
+      try {
+        const current = await getTripTracking('ride', activeRequest.id);
+        if (!active) return;
+        setTracking(current);
+        if (current.status === 'in_progress' || current.status === 'completed') {
+          setStatus(current.status);
+        }
+      } catch (trackingError) {
+        if (active) setError(getRideServiceErrorMessage(trackingError, 'Could not load live trip status.'));
+      }
+    };
+    void refreshTracking();
+    const interval = window.setInterval(() => void refreshTracking(), 5000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [activeRequest, setError, setStatus, status]);
+
   const formatWaitTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -268,9 +342,12 @@ export default function PassengerHome() {
           showUserLocation
           onLocationFound={handleLocationFound}
           destination={destination}
-          pickupLocation={status === 'confirming' || status === 'requesting' || status === 'waiting' ? pickup : null}
+          pickupLocation={status === 'confirming' || status === 'requesting' || status === 'waiting' || status === 'accepted' || status === 'in_progress' ? pickup : null}
           searching={status === 'requesting' || status === 'waiting'}
           routeGeometry={route?.geometry ?? null}
+          bikeLocation={tracking?.driverLocation}
+          bikeHeading={tracking?.driverLocation?.heading}
+          followBikeLocation
         />
       </div>
 
@@ -449,7 +526,7 @@ export default function PassengerHome() {
         )}
 
         {/* ═══ WAITING STATE ═══ */}
-        {(status === 'waiting' || status === 'accepted') && (
+        {(status === 'waiting' || status === 'accepted' || status === 'in_progress' || status === 'completed') && (
           <motion.div
             key={status}
             initial={{ y: 100, opacity: 0 }}
@@ -475,7 +552,7 @@ export default function PassengerHome() {
               </div>
 
               <h2 className="text-xl font-bold tracking-tight text-black mb-1">
-                {status === 'accepted' ? 'Ride confirmed' : 'Finding a driver…'}
+                {status === 'waiting' ? 'Finding a driver…' : status === 'in_progress' ? 'Ride in progress' : status === 'completed' ? 'Ride complete' : 'Ride confirmed'}
               </h2>
               
               {/* Timer */}
@@ -506,7 +583,7 @@ export default function PassengerHome() {
                 </div>
               </div>
 
-              {status === 'accepted' && acceptedBid && (
+              {status !== 'waiting' && acceptedBid && (
                 <div className="w-full rounded-2xl border border-sunset/20 bg-sunset/5 p-4 mb-4 text-left">
                   <p className="text-xs font-semibold uppercase tracking-wide text-sunset">Driver</p>
                   <p className="mt-1 text-lg font-bold tracking-tight text-black">{acceptedBid.driverName}</p>
@@ -516,6 +593,28 @@ export default function PassengerHome() {
                   <p className="mt-2 text-sm font-semibold text-sunset">
                     Agreed fare: {formatFare(acceptedBid.proposedFare)}
                   </p>
+                </div>
+              )}
+
+              {status !== 'waiting' && (
+                <div className="mb-4 w-full space-y-2">
+                  {status !== 'completed' && (
+                    <>
+                      <p className="text-sm font-medium text-gray-600">
+                        {tracking?.driverLocation ? 'Driver is on the way' : 'Waiting for driver to start'}
+                      </p>
+                      <Button fullWidth loading={sharing} onClick={() => void handleShareTrip()}>
+                        <Share2 aria-hidden="true" className="mr-2 h-4 w-4" />
+                        Share trip
+                      </Button>
+                    </>
+                  )}
+                  {shareInfo && (
+                    <Button variant="outline" disabled={sharing} onClick={() => void handleRevokeShare()}>
+                      Stop sharing
+                    </Button>
+                  )}
+                  {shareMessage && <p className="text-sm text-gray-600">{shareMessage}</p>}
                 </div>
               )}
 
@@ -571,6 +670,20 @@ export default function PassengerHome() {
               {status === 'waiting' && (
                 <Button variant="ghost" fullWidth onClick={handleCancel}>
                   <X className="mr-2 h-4 w-4" /> Cancel Request
+                </Button>
+              )}
+              {status === 'completed' && (
+                <Button
+                  fullWidth
+                  onClick={() => {
+                    reset();
+                    setTracking(null);
+                    setShareInfo(null);
+                    setShareMessage(null);
+                    setAcceptedBid(null);
+                  }}
+                >
+                  Done
                 </Button>
               )}
             </div>
