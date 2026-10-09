@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { sendOTP, verifyOTP } from '../../services/supabase';
+import { getCurrentProfile, sendOTP, verifyOTP } from '../../services/supabase';
 import { PageContainer } from '../../components/ui/PageContainer';
 import { Button } from '../../components/ui/Button';
 import { OTPInput } from '../../components/ui/OTPInput';
@@ -14,8 +14,7 @@ export default function OTPScreen() {
   const [resending, setResending] = useState(false);
   
   const navigate = useNavigate();
-  const email = useAuthStore(state => state.email);
-  const setStoreOtp = useAuthStore(state => state.setOtp);
+  const { email, authMode, setOtp: setStoreOtp, completeAuth } = useAuthStore();
 
   useEffect(() => {
     if (countdown > 0) {
@@ -32,7 +31,15 @@ export default function OTPScreen() {
         const res = await verifyOTP(email, otp);
         if (res.success) {
           setStoreOtp(otp);
-          navigate('/auth/role');
+          const profile = await getCurrentProfile();
+          if (profile) {
+            completeAuth(profile);
+            navigate('/home');
+          } else if (authMode === 'login') {
+            setError('No account found for this email. Sign up to create one.');
+          } else {
+            navigate('/auth/role');
+          }
         } else {
           setError(res.error || 'Invalid code');
         }
@@ -48,7 +55,7 @@ export default function OTPScreen() {
     setResending(true);
     setError('');
     try {
-      await sendOTP(email);
+      await sendOTP(email, authMode === 'signup');
       setCountdown(30);
     } catch (resendError) {
       setError(resendError instanceof Error ? resendError.message : 'Could not resend the verification code.');
@@ -60,13 +67,15 @@ export default function OTPScreen() {
   return (
     <PageContainer>
       <div className="mb-8 mt-4 flex items-center">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-gray-100">
+        <button onClick={() => navigate('/auth/email')} className="p-2 -ml-2 rounded-full hover:bg-gray-100" aria-label="Back">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
         </button>
       </div>
       
       <div className="flex-1 flex flex-col items-center">
-        <h1 className="text-3xl font-bold mb-2 self-start">Verify your email</h1>
+        <h1 className="text-3xl font-bold mb-2 self-start">
+          {authMode === 'signup' ? 'Verify your email' : 'Log in'}
+        </h1>
         <p className="text-gray-500 mb-8 self-start">Enter the 6-digit code sent to {email}</p>
 
         <OTPInput value={otp} onChange={setOtp} error={error} />
@@ -89,7 +98,7 @@ export default function OTPScreen() {
           disabled={otp.length < 6}
           loading={loading}
         >
-          Verify
+          {authMode === 'signup' ? 'Verify email' : 'Log in'}
         </Button>
       </div>
     </PageContainer>

@@ -11,7 +11,7 @@ export default function EmailScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const setStoredEmail = useAuthStore(state => state.setEmail);
+  const { authMode, setEmail: setStoredEmail } = useAuthStore();
 
   const handleSubmit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -19,7 +19,7 @@ export default function EmailScreen() {
       setLoading(true);
       setError('');
       try {
-        await sendOTP(normalizedEmail);
+        await sendOTP(normalizedEmail, authMode === 'signup');
         setStoredEmail(normalizedEmail);
         navigate('/auth/otp');
       } catch (requestError) {
@@ -33,14 +33,18 @@ export default function EmailScreen() {
   return (
     <PageContainer>
       <div className="mb-8 mt-4 flex items-center">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-gray-100">
+        <button onClick={() => navigate('/auth')} className="p-2 -ml-2 rounded-full hover:bg-gray-100" aria-label="Back">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
         </button>
       </div>
       
       <div className="flex-1">
-        <h1 className="text-3xl font-bold mb-2">Enter your email address</h1>
-        <p className="text-gray-500 mb-8">We'll email you a verification code</p>
+        <h1 className="text-3xl font-bold mb-2">
+          {authMode === 'signup' ? 'Create your account' : 'Log in'}
+        </h1>
+        <p className="text-gray-500 mb-8">
+          {authMode === 'signup' ? 'Enter your email to get started' : 'Enter your email to continue'}
+        </p>
 
         <Input
           type="email"
@@ -62,7 +66,7 @@ export default function EmailScreen() {
           disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())}
           loading={loading}
         >
-          Send code
+          Continue
         </Button>
       </div>
     </PageContainer>

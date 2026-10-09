@@ -4,6 +4,7 @@ import type { User } from '../types';
 
 interface AuthState {
   // State
+  authMode: 'login' | 'signup';
   email: string;
   otp: string;
   role: 'passenger' | 'driver' | null;
@@ -14,6 +15,7 @@ interface AuthState {
 
   // Actions
   setEmail: (email: string) => void;
+  setAuthMode: (mode: 'login' | 'signup') => void;
   setOtp: (otp: string) => void;
   setRole: (role: 'passenger' | 'driver') => void;
   setBicycleNumber: (bicycleNumber: string) => void;
@@ -27,6 +29,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       // Initial state
+      authMode: 'login',
       email: '',
       otp: '',
       role: null,
@@ -37,6 +40,7 @@ export const useAuthStore = create<AuthState>()(
 
       // Actions
       setEmail: (email) => set({ email }),
+      setAuthMode: (authMode) => set({ authMode }),
       setOtp: (otp) => set({ otp }),
       setRole: (role) => set({ role }),
       setBicycleNumber: (bicycleNumber) => set({ bicycleNumber }),
@@ -46,6 +50,7 @@ export const useAuthStore = create<AuthState>()(
         set({ user, isAuthenticated: true }),
       logout: () =>
         set({
+          authMode: 'login',
           email: '',
           otp: '',
           role: null,

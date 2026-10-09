@@ -43,7 +43,7 @@ export default function WelcomeScreen() {
 
   const handleDone = () => {
     completeOnboarding();
-    navigate('/auth/email');
+    navigate('/auth');
   };
 
   return (

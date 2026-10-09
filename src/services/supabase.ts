@@ -19,14 +19,38 @@ export async function signOut(): Promise<void> {
   if (error) throw error;
 }
 
-export async function sendOTP(email: string): Promise<{ success: boolean }> {
+export async function sendOTP(email: string, shouldCreateUser = false): Promise<{ success: boolean }> {
   const { error } = await getSupabaseClient().auth.signInWithOtp({
     email,
-    options: { shouldCreateUser: true },
+    options: { shouldCreateUser },
   });
 
   if (error) throw error;
   return { success: true };
+}
+
+export async function getCurrentProfile(): Promise<User | null> {
+  const { data: { user: authUser }, error: authError } = await getSupabaseClient().auth.getUser();
+  if (authError) throw authError;
+  if (!authUser) return null;
+
+  const { data, error } = await getSupabaseClient()
+    .from('profiles')
+    .select('id, email, phone, full_name, role, created_at')
+    .eq('id', authUser.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    email: data.email ?? undefined,
+    phone: data.phone,
+    name: data.full_name,
+    role: data.role,
+    createdAt: data.created_at,
+  };
 }
 
 export async function verifyOTP(
