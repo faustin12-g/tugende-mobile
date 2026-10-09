@@ -56,6 +56,7 @@ export default function PassengerHome() {
 
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isBookingRide, setIsBookingRide] = useState(false);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [waitingSeconds, setWaitingSeconds] = useState(0);
   const [offerAmount, setOfferAmount] = useState('');
   const [isSettingOffer, setIsSettingOffer] = useState(false);
@@ -85,20 +86,37 @@ export default function PassengerHome() {
       setDestination(place);
       setError(null);
 
-      if (!place || !pickup) return;
+      if (!place) {
+        setIsLoadingRoute(false);
+        return;
+      }
 
+      const pickupLocation = pickup ?? (
+        userLocation
+          ? { address: 'Current Location', lat: userLocation.lat, lng: userLocation.lng }
+          : null
+      );
+      if (!pickupLocation) {
+        setError('Pickup location is not ready. Tap the location button on the map, then choose your destination again.');
+        return;
+      }
+
+      setIsLoadingRoute(true);
       try {
         const routeInfo = await fetchCyclingRoute(
-          { lat: pickup.lat, lng: pickup.lng },
+          { lat: pickupLocation.lat, lng: pickupLocation.lng },
           place.location
         );
         const fare = calculateFare(routeInfo.distanceKm);
+        setPickup(pickupLocation);
         setRoute(routeInfo, fare);
       } catch (err) {
         setError(getRideServiceErrorMessage(err, 'Could not fetch route'));
+      } finally {
+        setIsLoadingRoute(false);
       }
     },
-    [pickup, setDestination, setRoute, setError]
+    [pickup, userLocation, setDestination, setPickup, setRoute, setError]
   );
 
   // Submit ride request
@@ -392,6 +410,18 @@ export default function PassengerHome() {
                   selectedPlace={destination}
                   onSelect={handleDestinationSelect}
                 />
+                {destination && status === 'idle' && (
+                  <Button
+                    fullWidth
+                    size="lg"
+                    loading={isLoadingRoute}
+                    disabled={isLoadingRoute || (!pickup && !userLocation)}
+                    onClick={() => void handleDestinationSelect(destination)}
+                  >
+                    <Navigation aria-hidden="true" className="mr-2 h-5 w-5" />
+                    {isLoadingRoute ? 'Calculating route…' : 'Continue'}
+                  </Button>
+                )}
                 {error && <p role="alert" className="text-center text-sm text-red">{error}</p>}
               </>
             ) : (

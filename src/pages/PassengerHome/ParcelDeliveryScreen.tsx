@@ -330,13 +330,14 @@ export default function ParcelDeliveryScreen() {
                 <button
                   type="button"
                   onClick={chooseCurrentLocation}
-                  className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
-                    pickupMode === 'current'
+                  disabled={loading}
+                  className={`rounded-xl border px-3 py-3 text-sm font-semibold transition disabled:opacity-70 ${
+                    pickupMode === 'current' && userLocation
                       ? 'border-sunset bg-sunset/5 text-sunset'
                       : 'border-gray-200 text-gray-600'
                   }`}
                 >
-                  My location
+                  {loading ? 'Locating…' : userLocation ? 'Use my location' : 'Get my location'}
                 </button>
                 <button
                   type="button"
@@ -355,10 +356,17 @@ export default function ParcelDeliveryScreen() {
                 </button>
               </div>
               {pickupMode === 'current' ? (
-                <p className="mt-2 flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-3 text-sm font-medium text-gray-700">
-                  <MapPin aria-hidden="true" className="h-4 w-4 text-sunset" />
-                  {userLocation?.address ?? (loading ? 'Finding location…' : 'Tap “My location”')}
-                </p>
+                <>
+                  <p className="mt-2 flex items-center gap-2 rounded-xl bg-gray-50 px-3 py-3 text-sm font-medium text-gray-700">
+                    <MapPin aria-hidden="true" className="h-4 w-4 text-sunset" />
+                    {userLocation?.address ?? (loading ? 'Finding location…' : 'Tap “My location”')}
+                  </p>
+                  {!userLocation && !loading && (
+                    <p className="mt-2 text-xs font-medium text-gray-500">
+                      If location isn’t available, choose a pickup address instead.
+                    </p>
+                  )}
+                </>
               ) : (
                 <div className="mt-2">
                   <DestinationSearch
