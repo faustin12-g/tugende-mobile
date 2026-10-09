@@ -1,20 +1,73 @@
-import StationMap from './components/StationMap';
-import ScannerAndMoMo from './components/ScannerAndMoMo';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from './store/authStore';
+import WelcomeScreen from './pages/Welcome/WelcomeScreen';
+import AuthChoiceScreen from './pages/Auth/AuthChoiceScreen';
+import EmailScreen from './pages/Auth/EmailScreen';
+import OTPScreen from './pages/Auth/OTPScreen';
+import RoleScreen from './pages/Auth/RoleScreen';
+import ProfileScreen from './pages/Auth/ProfileScreen';
+import PassengerHome from './pages/PassengerHome/PassengerHome';
+import ParcelDeliveryScreen from './pages/PassengerHome/ParcelDeliveryScreen';
+import DriverHome from './pages/DriverHome/DriverHome';
+import PublicTrackingScreen from './pages/Tracking/PublicTrackingScreen';
+
+function AppRoutes() {
+  const { isAuthenticated, hasSeenOnboarding, user } = useAuthStore();
+  const location = useLocation();
+
+  if (location.pathname.startsWith('/track/')) {
+    return (
+      <Routes>
+        <Route path="/track/:token" element={<PublicTrackingScreen />} />
+        <Route path="*" element={<Navigate to="/auth" replace />} />
+      </Routes>
+    );
+  }
+
+  // Not seen onboarding yet → show welcome slides
+  if (!hasSeenOnboarding) {
+    return (
+      <Routes>
+        <Route path="*" element={<WelcomeScreen />} />
+      </Routes>
+    );
+  }
+
+  // Not authenticated → show auth flow
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/auth" element={<AuthChoiceScreen />} />
+        <Route path="/auth/email" element={<EmailScreen />} />
+        <Route path="/auth/otp" element={<OTPScreen />} />
+        <Route path="/auth/role" element={<RoleScreen />} />
+        <Route path="/auth/profile" element={<ProfileScreen />} />
+        <Route path="*" element={<Navigate to="/auth" replace />} />
+      </Routes>
+    );
+  }
+
+  // Authenticated → role-specific home
+  return (
+    <Routes>
+      <Route
+        path="/home"
+        element={
+          user?.role === 'driver' ? <DriverHome /> : <PassengerHome />
+        }
+      />
+      {user?.role === 'passenger' && (
+        <Route path="/parcels/new" element={<ParcelDeliveryScreen />} />
+      )}
+      <Route path="*" element={<Navigate to="/home" replace />} />
+    </Routes>
+  );
+}
 
 export default function App() {
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', maxWidth: '500px', margin: '0 auto', border: '1px solid #eee', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ backgroundColor: '#000', color: '#fff', padding: '15px', textAlign: 'center', margin: 0 }}>
-        <h2 style={{ margin: 0 }}>Igare Kigali</h2>
-      </header>
-      
-      {/* Map takes up top section */}
-      <StationMap />
-      
-      {/* Scanner & Payment anchors the bottom */}
-      <div style={{ flexGrow: 1 }}>
-        <ScannerAndMoMo />
-      </div>
-    </div>
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }
