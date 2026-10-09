@@ -61,6 +61,47 @@ deployed public app URL for viewers outside the driver's local network. Set
 `VITE_PUBLIC_APP_URL` to that web app URL when building the native app; web
 builds otherwise use the current site origin.
 
+## Native team-testing builds
+
+Capacitor Android and iOS projects are included. Install Node.js, clone the
+repository, run `npm ci`, and create your local `.env` from `.env.example`.
+The `.env` file is intentionally ignored by Git; native builds bundle its
+`VITE_` values into the app, so configure working Supabase, Mapbox, and Places
+credentials before building. Use a deployed public web URL for
+`VITE_PUBLIC_APP_URL` so shared tracking links work for teammates.
+
+### Android APK
+
+Install Android Studio with Android SDK 36 and its bundled JDK (JDK 17 or
+newer). In the project root, run this command on macOS, Linux, or Windows:
+
+```sh
+npm run android:apk
+```
+
+The installable debug APK is
+`android/app/build/outputs/apk/debug/app-debug.apk`. Share that single APK
+file with testers; they do not need the source project or a Play Store
+release. On their Android devices, testers may need to allow installation
+from the app used to open the APK. This debug build is for internal testing,
+not store distribution.
+
+### iOS device testing
+
+On a Mac with Xcode, run `npm run ios:sync`, then open
+`ios/App/App.xcodeproj` in Xcode, select a simulator or connected iPhone, and
+run the `App` target. A simulator build can be tested in the iOS Simulator.
+Installing on teammates' physical iPhones requires Apple code signing and
+device provisioning. For a small team, use Xcode's development signing with
+each device registered; a directly shareable Ad Hoc IPA requires a matching
+distribution profile and the testers' device IDs. TestFlight is another
+option later, but is not needed for Android APK testing.
+
+For ordinary team testing, share the APK for Android. Do not share `.env`,
+signing certificates, provisioning profiles, Android keystores, or debug
+keystores. The native platform folders and app icon resources are already
+included in the repository.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
